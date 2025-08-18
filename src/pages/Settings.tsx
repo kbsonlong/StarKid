@@ -1,0 +1,629 @@
+import { useState, useEffect } from 'react'
+import { 
+  User, 
+  Users, 
+  Settings as SettingsIcon, 
+  Bell, 
+  Shield, 
+  Palette, 
+  Save, 
+  Edit, 
+  Trash2, 
+  Plus, 
+  X, 
+  Check,
+  UserPlus,
+  Crown,
+  Baby
+} from 'lucide-react'
+import { useAuthStore } from '../store'
+import { Child } from '../lib/supabase'
+import { calculateAge, formatDate } from '../lib/utils'
+
+interface ChildFormData {
+  name: string
+  birth_date: string
+  avatar_url?: string
+}
+
+const initialChildForm: ChildFormData = {
+  name: '',
+  birth_date: '',
+  avatar_url: ''
+}
+
+interface UserProfileData {
+  name: string
+  email: string
+  avatar_url?: string
+}
+
+interface FamilyData {
+  name: string
+  description?: string
+}
+
+export function Settings() {
+  const { user, family, children, updateProfile, updateFamily, addChild, updateChild, removeChild } = useAuthStore()
+  
+  const [activeTab, setActiveTab] = useState<'profile' | 'family' | 'children' | 'notifications' | 'privacy'>('profile')
+  const [showChildForm, setShowChildForm] = useState(false)
+  const [editingChild, setEditingChild] = useState<Child | null>(null)
+  const [childFormData, setChildFormData] = useState<ChildFormData>(initialChildForm)
+  const [submitting, setSubmitting] = useState(false)
+  
+  const [profileData, setProfileData] = useState<UserProfileData>({
+    name: user?.name || '',
+    email: user?.email || '',
+    avatar_url: user?.avatar_url || ''
+  })
+  
+  const [familyData, setFamilyData] = useState<FamilyData>({
+    name: family?.name || '',
+    description: family?.description || ''
+  })
+  
+  const [notifications, setNotifications] = useState({
+    email_notifications: true,
+    push_notifications: true,
+    weekly_reports: true,
+    achievement_alerts: true
+  })
+  
+  const [privacy, setPrivacy] = useState({
+    data_sharing: false,
+    analytics: true,
+    marketing: false
+  })
+
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        name: user.name || '',
+        email: user.email || '',
+        avatar_url: user.avatar_url || ''
+      })
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (family) {
+      setFamilyData({
+        name: family.name || '',
+        description: family.description || ''
+      })
+    }
+  }, [family])
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      await updateProfile(profileData)
+    } catch (error) {
+      console.error('Failed to update profile:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleFamilySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      await updateFamily(familyData)
+    } catch (error) {
+      console.error('Failed to update family:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleChildSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!childFormData.name.trim() || !childFormData.birth_date) return
+
+    setSubmitting(true)
+    try {
+      if (editingChild) {
+        await updateChild(editingChild.id, childFormData)
+      } else {
+        await addChild(childFormData)
+      }
+      handleChildCancel()
+    } catch (error) {
+      console.error('Failed to save child:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleChildEdit = (child: Child) => {
+    setEditingChild(child)
+    setChildFormData({
+      name: child.name,
+      birth_date: child.birth_date,
+      avatar_url: child.avatar_url || ''
+    })
+    setShowChildForm(true)
+  }
+
+  const handleChildDelete = async (child: Child) => {
+    if (window.confirm(`确定要删除 ${child.name} 的信息吗？这将同时删除相关的所有行为记录。`)) {
+      await removeChild(child.id)
+    }
+  }
+
+  const handleChildCancel = () => {
+    setShowChildForm(false)
+    setEditingChild(null)
+    setChildFormData(initialChildForm)
+  }
+
+  const tabs = [
+    { id: 'profile', label: '个人资料', icon: User },
+    { id: 'family', label: '家庭信息', icon: Users },
+    { id: 'children', label: '儿童管理', icon: Baby },
+    { id: 'notifications', label: '通知设置', icon: Bell },
+    { id: 'privacy', label: '隐私设置', icon: Shield }
+  ]
+
+  const isParent = user?.role === 'parent'
+
+  return (
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">设置</h1>
+        <p className="text-gray-600 mt-1">管理您的账户、家庭和应用偏好设置</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* 侧边栏导航 */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <nav className="space-y-2">
+              {tabs.map(tab => {
+                const Icon = tab.icon
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`w-full flex items-center px-3 py-2 text-left rounded-lg transition-colors ${
+                      activeTab === tab.id
+                        ? 'bg-yellow-500 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 mr-3" />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* 主要内容区域 */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            {/* 个人资料 */}
+            {activeTab === 'profile' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-6">个人资料</h2>
+                
+                <form onSubmit={handleProfileSubmit} className="space-y-6">
+                  <div className="flex items-center space-x-6">
+                    <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center">
+                      {profileData.avatar_url ? (
+                        <img 
+                          src={profileData.avatar_url} 
+                          alt="头像" 
+                          className="w-20 h-20 rounded-full object-cover"
+                        />
+                      ) : (
+                        <User className="h-8 w-8 text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <button 
+                        type="button"
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        更换头像
+                      </button>
+                      <p className="text-sm text-gray-500 mt-1">支持 JPG、PNG 格式，建议尺寸 200x200</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        姓名
+                      </label>
+                      <input
+                        type="text"
+                        value={profileData.name}
+                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        placeholder="请输入您的姓名"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        邮箱
+                      </label>
+                      <input
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        placeholder="请输入邮箱地址"
+                        disabled
+                      />
+                      <p className="text-sm text-gray-500 mt-1">邮箱地址不可修改</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Crown className="h-5 w-5 text-yellow-500" />
+                    <span className="text-sm font-medium text-gray-700">
+                      账户类型: {user?.role === 'parent' ? '家长' : '儿童'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {submitting ? '保存中...' : '保存更改'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* 家庭信息 */}
+            {activeTab === 'family' && isParent && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-6">家庭信息</h2>
+                
+                <form onSubmit={handleFamilySubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      家庭名称
+                    </label>
+                    <input
+                      type="text"
+                      value={familyData.name}
+                      onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      placeholder="请输入家庭名称"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      家庭描述
+                    </label>
+                    <textarea
+                      value={familyData.description}
+                      onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      rows={3}
+                      placeholder="描述一下您的家庭"
+                    />
+                  </div>
+                  
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-medium text-gray-800 mb-2">家庭统计</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">家庭成员:</span>
+                        <span className="ml-2 font-medium">{children.length + 1} 人</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">创建时间:</span>
+                        <span className="ml-2 font-medium">{family?.created_at ? formatDate(family.created_at) : '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {submitting ? '保存中...' : '保存更改'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* 儿童管理 */}
+            {activeTab === 'children' && isParent && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-gray-800">儿童管理</h2>
+                  <button
+                    onClick={() => setShowChildForm(true)}
+                    className="inline-flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加儿童
+                  </button>
+                </div>
+                
+                {/* 儿童表单 */}
+                {showChildForm && (
+                  <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-medium text-gray-800">
+                        {editingChild ? '编辑儿童信息' : '添加新儿童'}
+                      </h3>
+                      <button
+                        onClick={handleChildCancel}
+                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    
+                    <form onSubmit={handleChildSubmit} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            姓名 *
+                          </label>
+                          <input
+                            type="text"
+                            value={childFormData.name}
+                            onChange={(e) => setChildFormData({ ...childFormData, name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                            placeholder="请输入儿童姓名"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            出生日期 *
+                          </label>
+                          <input
+                            type="date"
+                            value={childFormData.birth_date}
+                            onChange={(e) => setChildFormData({ ...childFormData, birth_date: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                            required
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={handleChildCancel}
+                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="inline-flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          {submitting ? '保存中...' : '保存'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+                
+                {/* 儿童列表 */}
+                <div className="space-y-4">
+                  {children.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Baby className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500">还没有添加儿童信息</p>
+                      <p className="text-gray-400 text-sm mt-1">点击上方按钮添加第一个儿童</p>
+                    </div>
+                  ) : (
+                    children.map(child => (
+                      <div key={child.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                            {child.avatar_url ? (
+                              <img 
+                                src={child.avatar_url} 
+                                alt={child.name} 
+                                className="w-12 h-12 rounded-full object-cover"
+                              />
+                            ) : (
+                              <Baby className="h-6 w-6 text-yellow-600" />
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-800">{child.name}</h4>
+                            <p className="text-sm text-gray-600">
+                              {calculateAge(child.birth_date)} 岁 · 总积分: {child.total_points}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleChildEdit(child)}
+                            className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleChildDelete(child)}
+                            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 通知设置 */}
+            {activeTab === 'notifications' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-6">通知设置</h2>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">邮件通知</h3>
+                      <p className="text-sm text-gray-600">接收重要更新和提醒邮件</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifications.email_notifications}
+                        onChange={(e) => setNotifications({ ...notifications, email_notifications: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">推送通知</h3>
+                      <p className="text-sm text-gray-600">接收应用内推送通知</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifications.push_notifications}
+                        onChange={(e) => setNotifications({ ...notifications, push_notifications: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">周报提醒</h3>
+                      <p className="text-sm text-gray-600">每周接收孩子的成长报告</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifications.weekly_reports}
+                        onChange={(e) => setNotifications({ ...notifications, weekly_reports: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">成就提醒</h3>
+                      <p className="text-sm text-gray-600">孩子获得成就时立即通知</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notifications.achievement_alerts}
+                        onChange={(e) => setNotifications({ ...notifications, achievement_alerts: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 隐私设置 */}
+            {activeTab === 'privacy' && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-6">隐私设置</h2>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">数据共享</h3>
+                      <p className="text-sm text-gray-600">允许与第三方服务共享匿名数据</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={privacy.data_sharing}
+                        onChange={(e) => setPrivacy({ ...privacy, data_sharing: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">使用分析</h3>
+                      <p className="text-sm text-gray-600">帮助我们改进产品体验</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={privacy.analytics}
+                        onChange={(e) => setPrivacy({ ...privacy, analytics: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-800">营销邮件</h3>
+                      <p className="text-sm text-gray-600">接收产品更新和优惠信息</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={privacy.marketing}
+                        onChange={(e) => setPrivacy({ ...privacy, marketing: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                    </label>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <Shield className="h-5 w-5 text-yellow-600 mt-0.5 mr-3" />
+                      <div>
+                        <h4 className="font-medium text-yellow-800">数据安全承诺</h4>
+                        <p className="text-sm text-yellow-700 mt-1">
+                          我们承诺保护您和孩子的隐私数据，不会在未经授权的情况下分享个人信息。
+                          所有数据都经过加密存储和传输。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
