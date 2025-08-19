@@ -431,18 +431,18 @@ const Collaborate: React.FC = () => {
                   <div key={member.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                        {member.user.avatar_url ? (
-                          <img src={member.user.avatar_url} alt={member.user.name} className="w-full h-full rounded-full object-cover" />
+                        {member.user?.avatar_url ? (
+                          <img src={member.user?.avatar_url} alt={member.user?.name || '用户'} className="w-full h-full rounded-full object-cover" />
                         ) : (
-                          <span className="text-white font-semibold">{member.user.name[0]}</span>
+                          <span className="text-white font-semibold">{member.user?.name?.[0] || '?'}</span>
                         )}
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
-                          <h4 className="font-medium text-gray-800">{member.user.name}</h4>
+                          <h4 className="font-medium text-gray-800">{member.user?.name || '未知用户'}</h4>
                           {member.role === 'parent' && <Crown className="w-4 h-4 text-yellow-500" />}
                         </div>
-                        <p className="text-sm text-gray-600">{member.user.email}</p>
+                        <p className="text-sm text-gray-600">{member.user?.email || '无邮箱'}</p>
                         <div className="flex items-center space-x-2 mt-1">
                           <span className={`px-2 py-1 text-xs rounded-full ${getRoleColor(member.role)}`}>
                             {getRoleDisplayName(member.role)}
