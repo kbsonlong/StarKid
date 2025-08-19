@@ -172,6 +172,22 @@ interface ChatState {
   loadPresetMessages: () => Promise<string[]>
 }
 
+// 积分排行榜状态
+interface LeaderboardEntry {
+  id: string
+  name: string
+  points: number
+  rank: number
+  avatar?: string
+}
+
+interface LeaderboardState {
+  leaderboard: LeaderboardEntry[]
+  loading: boolean
+  loadLeaderboard: (familyId?: string) => Promise<void>
+  getChildRank: (childId: string) => Promise<number | null>
+}
+
 // 生成随机邀请码
 function generateInviteCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -1265,6 +1281,257 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('Load preset messages error:', error)
       return []
+    }
+  }
+}))
+
+// 积分排行榜Store
+export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
+  leaderboard: [],
+  loading: false,
+
+  loadLeaderboard: async (familyId?: string) => {
+    set({ loading: true })
+    try {
+      let query = supabase
+        .from('children')
+        .select('id, name, total_points, avatar_url')
+        .order('total_points', { ascending: false })
+      
+      if (familyId) {
+        query = query.eq('family_id', familyId)
+      }
+      
+      const { data, error } = await query
+      
+      if (error) throw error
+      
+      // 添加排名信息
+      const leaderboardData: LeaderboardEntry[] = (data || []).map((child, index) => ({
+        id: child.id,
+        name: child.name,
+        points: child.total_points || 0,
+        rank: index + 1,
+        avatar: child.avatar_url || ''
+      }))
+      
+      set({ leaderboard: leaderboardData })
+    } catch (error) {
+      console.error('Load leaderboard error:', error)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  getChildRank: async (childId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('children')
+        .select('id, total_points')
+        .order('total_points', { ascending: false })
+      
+      if (error) throw error
+      
+      const childIndex = data?.findIndex(child => child.id === childId)
+      return childIndex !== undefined && childIndex !== -1 ? childIndex + 1 : null
+    } catch (error) {
+      console.error('Get child rank error:', error)
+      return null
+    }
+  }
+}))
+
+// 监督日志接口
+interface SupervisionLog {
+  id: string
+  child_id: string
+  activity_type: 'chat' | 'challenge' | 'friendship'
+  activity_id?: string
+  details?: any
+  flagged: boolean
+  reviewed_by?: string
+  reviewed_at?: string
+  created_at: string
+  child?: {
+    name: string
+    avatar_url?: string
+  }
+}
+
+// 监督状态接口
+interface SupervisionState {
+  logs: SupervisionLog[]
+  flaggedLogs: SupervisionLog[]
+  loading: boolean
+  
+  loadSupervisionLogs: (familyId: string, filters?: {
+    childId?: string
+    activityType?: string
+    flagged?: boolean
+    dateRange?: { start: string; end: string }
+  }) => Promise<void>
+  flagActivity: (logId: string, reason?: string) => Promise<void>
+  reviewActivity: (logId: string, approved: boolean, notes?: string) => Promise<void>
+  getActivityStats: (familyId: string, period?: 'day' | 'week' | 'month') => Promise<{
+    totalActivities: number
+    flaggedActivities: number
+    chatMessages: number
+    challengeParticipations: number
+    friendshipRequests: number
+  }>
+}
+
+// 监督功能Store
+export const useSupervisionStore = create<SupervisionState>((set, get) => ({
+  logs: [],
+  flaggedLogs: [],
+  loading: false,
+
+  loadSupervisionLogs: async (familyId: string, filters = {}) => {
+    set({ loading: true })
+    try {
+      let query = supabase
+        .from('supervision_logs')
+        .select(`
+          *,
+          child:children(name, avatar_url)
+        `)
+        .eq('children.family_id', familyId)
+        .order('created_at', { ascending: false })
+      
+      if (filters.childId) {
+        query = query.eq('child_id', filters.childId)
+      }
+      
+      if (filters.activityType) {
+        query = query.eq('activity_type', filters.activityType)
+      }
+      
+      if (filters.flagged !== undefined) {
+        query = query.eq('flagged', filters.flagged)
+      }
+      
+      if (filters.dateRange) {
+        query = query
+          .gte('created_at', filters.dateRange.start)
+          .lte('created_at', filters.dateRange.end)
+      }
+      
+      const { data, error } = await query
+      
+      if (error) throw error
+      
+      const logs = data || []
+      const flaggedLogs = logs.filter(log => log.flagged)
+      
+      set({ logs, flaggedLogs })
+    } catch (error) {
+      console.error('Load supervision logs error:', error)
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  flagActivity: async (logId: string, reason?: string) => {
+    const { data, error } = await supabase
+      .from('supervision_logs')
+      .update({ 
+        flagged: true,
+        details: { 
+          ...get().logs.find(log => log.id === logId)?.details,
+          flag_reason: reason,
+          flagged_at: new Date().toISOString()
+        }
+      })
+      .eq('id', logId)
+      .select(`
+        *,
+        child:children(name, avatar_url)
+      `)
+      .single()
+    
+    if (error) throw error
+    
+    const { logs, flaggedLogs } = get()
+    const updatedLogs = logs.map(log => log.id === logId ? data : log)
+    const updatedFlaggedLogs = [...flaggedLogs, data]
+    
+    set({ logs: updatedLogs, flaggedLogs: updatedFlaggedLogs })
+  },
+
+  reviewActivity: async (logId: string, approved: boolean, notes?: string) => {
+    const { user } = useAuthStore.getState()
+    if (!user) throw new Error('User not authenticated')
+    
+    const { data, error } = await supabase
+      .from('supervision_logs')
+      .update({ 
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        details: {
+          ...get().logs.find(log => log.id === logId)?.details,
+          review_approved: approved,
+          review_notes: notes
+        }
+      })
+      .eq('id', logId)
+      .select(`
+        *,
+        child:children(name, avatar_url)
+      `)
+      .single()
+    
+    if (error) throw error
+    
+    const { logs, flaggedLogs } = get()
+    const updatedLogs = logs.map(log => log.id === logId ? data : log)
+    const updatedFlaggedLogs = flaggedLogs.map(log => log.id === logId ? data : log)
+    
+    set({ logs: updatedLogs, flaggedLogs: updatedFlaggedLogs })
+  },
+
+  getActivityStats: async (familyId: string, period = 'week') => {
+    try {
+      const now = new Date()
+      let startDate: Date
+      
+      switch (period) {
+        case 'day':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          break
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+          break
+        default: // week
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      }
+      
+      const { data, error } = await supabase
+        .from('supervision_logs')
+        .select('activity_type, flagged')
+        .eq('children.family_id', familyId)
+        .gte('created_at', startDate.toISOString())
+      
+      if (error) throw error
+      
+      const stats = {
+        totalActivities: data?.length || 0,
+        flaggedActivities: data?.filter(log => log.flagged).length || 0,
+        chatMessages: data?.filter(log => log.activity_type === 'chat').length || 0,
+        challengeParticipations: data?.filter(log => log.activity_type === 'challenge').length || 0,
+        friendshipRequests: data?.filter(log => log.activity_type === 'friendship').length || 0
+      }
+      
+      return stats
+    } catch (error) {
+      console.error('Get activity stats error:', error)
+      return {
+        totalActivities: 0,
+        flaggedActivities: 0,
+        chatMessages: 0,
+        challengeParticipations: 0,
+        friendshipRequests: 0
+      }
     }
   }
 }))
