@@ -14,17 +14,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     storage: {
       getItem: (key: string) => {
-        return localStorage.getItem(key)
+        if (typeof window !== 'undefined') {
+          return window.localStorage.getItem(key)
+        }
+        return null
       },
       setItem: (key: string, value: string) => {
-        localStorage.setItem(key, value)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, value)
+        }
       },
       removeItem: (key: string) => {
-        localStorage.removeItem(key)
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(key)
+        }
       }
     },
     // 设置会话过期时间为24小时（86400秒）
-    sessionRefreshMargin: 60, // 提前60秒刷新token
+    // 提前60秒刷新token
     // 自定义会话过期时间
     flowType: 'pkce'
   }

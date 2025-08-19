@@ -384,7 +384,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // 清理之前的监听器（如果存在）
       const currentListener = get().authListener
       if (currentListener) {
-        currentListener.unsubscribe()
+        currentListener.subscription.unsubscribe()
       }
       
       // 添加认证状态监听器
@@ -410,7 +410,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   cleanup: () => {
     const currentListener = get().authListener
     if (currentListener) {
-      currentListener.unsubscribe()
+      currentListener.subscription.unsubscribe()
       set({ authListener: null })
     }
   },

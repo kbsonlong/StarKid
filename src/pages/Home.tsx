@@ -258,7 +258,10 @@ export function Home() {
                     <div className={`text-sm xs:text-base font-semibold ${
                       behavior.points_change > 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {behavior.points_change > 0 ? '+' : ''}{behavior.points_change}
+                      {behavior.points_change > 0 
+                        ? `+${behavior.points_change}` 
+                        : `扣${Math.abs(behavior.points_change)}分`
+                      }
                     </div>
                     <div className="text-xs text-gray-500">
                       {new Date(behavior.created_at).toLocaleDateString()}

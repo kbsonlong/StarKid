@@ -62,11 +62,19 @@ export function Rules() {
 
     setSubmitting(true)
     try {
+      // 处理积分转换：惩罚类型的正数自动转为负数
+      const processedFormData = {
+        ...formData,
+        points: formData.type === 'punishment' && formData.points > 0 
+          ? -formData.points 
+          : formData.points
+      }
+      
       if (editingRule) {
-        await updateRule(editingRule.id, formData)
+        await updateRule(editingRule.id, processedFormData)
       } else {
         await createRule({
-          ...formData,
+          ...processedFormData,
           family_id: '', // 这个会在store中自动设置
           icon: '⭐', // 默认图标
           is_active: true
@@ -85,7 +93,7 @@ export function Rules() {
     setFormData({
       name: rule.name,
       description: rule.description || '',
-      points: rule.points,
+      points: rule.type === 'punishment' && rule.points < 0 ? Math.abs(rule.points) : rule.points,
       type: rule.type,
       category: rule.category || ''
     })
@@ -256,7 +264,7 @@ export function Rules() {
                   value={formData.points}
                   onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder={formData.type === 'reward' ? '正数表示奖励积分' : '负数表示扣除积分'}
+                  placeholder={formData.type === 'reward' ? '正数表示奖励积分' : '输入扣除的积分数（正数）'}
                   required
                 />
               </div>
@@ -391,7 +399,7 @@ export function Rules() {
                         <p className="text-gray-600 text-sm mb-3">{rule.description}</p>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-red-600 font-semibold">{rule.points} 积分</span>
+                        <span className="text-red-600 font-semibold">扣{Math.abs(rule.points)}分</span>
                         <span className="text-xs text-gray-500">
                           创建于 {new Date(rule.created_at).toLocaleDateString()}
                         </span>

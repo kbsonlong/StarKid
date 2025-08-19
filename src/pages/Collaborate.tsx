@@ -569,7 +569,7 @@ const Collaborate: React.FC = () => {
                             </div>
                             <p className="text-sm xs:text-base text-gray-800 mb-1">{behavior.description}</p>
                             <p className="text-xs xs:text-sm text-gray-600">
-                              积分: {behavior.type === 'positive' ? '+' : ''}{behavior.points} | 
+                              积分: {behavior.type === 'positive' ? `+${behavior.points}` : `扣${Math.abs(behavior.points)}分`} | 
                               时间: {new Date(behavior.created_at).toLocaleString()}
                             </p>
                           </div>

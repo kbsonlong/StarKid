@@ -290,7 +290,10 @@ export function Behaviors() {
                   <span className={`ml-auto font-semibold ${
                     selectedRule.type === 'reward' ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {selectedRule.points > 0 ? '+' : ''}{selectedRule.points} 积分
+                    {selectedRule.type === 'reward' 
+                      ? `+${selectedRule.points} 积分`
+                      : `扣${Math.abs(selectedRule.points)}分`
+                    }
                   </span>
                 </div>
                 {selectedRule.description && (
@@ -478,9 +481,14 @@ export function Behaviors() {
                     <div className={`text-lg font-bold ${
                       behavior.points_change > 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {behavior.points_change > 0 ? '+' : ''}{behavior.points_change}
+                      {behavior.points_change > 0 
+                        ? `+${behavior.points_change}` 
+                        : `扣${Math.abs(behavior.points_change)}分`
+                      }
                     </div>
-                    <div className="text-xs text-gray-500">积分</div>
+                    {behavior.points_change > 0 && (
+                      <div className="text-xs text-gray-500">积分</div>
+                    )}
                   </div>
                 </div>
               </div>
