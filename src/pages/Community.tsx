@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Trophy, MessageCircle, UserPlus, Star, Gift, Send, Plus, Heart, Target } from 'lucide-react';
+import { Users, Trophy, MessageCircle, UserPlus, Star, Gift } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -51,7 +51,7 @@ interface ChatMessage {
 }
 
 const Community: React.FC = () => {
-  const { user, selectedChild } = useAuthStore();
+  const {  selectedChild } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'friends' | 'challenges' | 'chat'>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);

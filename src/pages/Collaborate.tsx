@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff, CheckCircle, XCircle, RefreshCw, Trash2, Share2, Clock } from 'lucide-react';
+import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
