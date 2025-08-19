@@ -44,7 +44,7 @@ interface FamilyData {
 }
 
 function Settings() {
-  const { user, family, children, updateProfile, updateFamily, addChild, updateChild, removeChild } = useAuthStore()
+  const { user, family, children, updateProfile, updateFamily, createFamily, addChild, updateChild, removeChild } = useAuthStore()
   
   const [activeTab, setActiveTab] = useState<'profile' | 'family' | 'children' | 'notifications' | 'privacy'>('profile')
   const [showChildForm, setShowChildForm] = useState(false)
@@ -111,9 +111,13 @@ function Settings() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      await updateFamily(familyData)
+      if (family) {
+        await updateFamily(familyData)
+      } else {
+        await createFamily(familyData)
+      }
     } catch (error) {
-      console.error('Failed to update family:', error)
+      console.error('Failed to save family:', error)
     } finally {
       setSubmitting(false)
     }
