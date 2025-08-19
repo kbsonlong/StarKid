@@ -43,7 +43,7 @@ interface FamilyData {
   description?: string
 }
 
-export function Settings() {
+function Settings() {
   const { user, family, children, updateProfile, updateFamily, addChild, updateChild, removeChild } = useAuthStore()
   
   const [activeTab, setActiveTab] = useState<'profile' | 'family' | 'children' | 'notifications' | 'privacy'>('profile')
@@ -205,8 +205,7 @@ export function Settings() {
         </div>
 
         {/* 主要内容区域 */}
-        <div className="lg:col-span-3">
-          <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm p-6">
             {/* 个人资料 */}
             {activeTab === 'profile' && (
               <div>
@@ -266,6 +265,20 @@ export function Settings() {
                     </div>
                   </div>
                   
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      头像链接
+                    </label>
+                    <input
+                      type="url"
+                      value={profileData.avatar_url || ''}
+                      onChange={(e) => setProfileData({ ...profileData, avatar_url: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                      placeholder="请输入头像图片链接"
+                    />
+                    <p className="text-sm text-gray-500 mt-1">请输入有效的图片链接地址</p>
+                  </div>
+                  
                   <div className="flex items-center space-x-2">
                     <Crown className="h-5 w-5 text-yellow-500" />
                     <span className="text-sm font-medium text-gray-700">
@@ -292,58 +305,107 @@ export function Settings() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-800 mb-6">家庭信息</h2>
                 
-                <form onSubmit={handleFamilySubmit} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      家庭名称
-                    </label>
-                    <input
-                      type="text"
-                      value={familyData.name}
-                      onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                      placeholder="请输入家庭名称"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      家庭描述
-                    </label>
-                    <textarea
-                      value={familyData.description}
-                      onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                      rows={3}
-                      placeholder="描述一下您的家庭"
-                    />
-                  </div>
-                  
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-medium text-gray-800 mb-2">家庭统计</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600">家庭成员:</span>
-                        <span className="ml-2 font-medium">{children.length + 1} 人</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">创建时间:</span>
-                        <span className="ml-2 font-medium">{family?.created_at ? formatDate(family.created_at) : '-'}</span>
-                      </div>
+                {!family ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">还没有创建家庭</h3>
+                    <p className="text-gray-600 mb-6">创建家庭后，您可以添加儿童并管理他们的行为记录</p>
+                    <div>
+                      <form onSubmit={handleFamilySubmit} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            家庭名称
+                          </label>
+                          <input
+                            type="text"
+                            value={familyData.name}
+                            onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                            placeholder="请输入家庭名称"
+                            required
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            家庭描述
+                          </label>
+                          <textarea
+                            value={familyData.description}
+                            onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                            rows={3}
+                            placeholder="描述一下您的家庭"
+                          />
+                        </div>
+                        
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            disabled={submitting}
+                            className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            {submitting ? '创建中...' : '创建家庭'}
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </div>
+                ) : (
+                  <form onSubmit={handleFamilySubmit} className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        家庭名称
+                      </label>
+                      <input
+                        type="text"
+                        value={familyData.name}
+                        onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        placeholder="请输入家庭名称"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        家庭描述
+                      </label>
+                      <textarea
+                        value={familyData.description}
+                        onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        rows={3}
+                        placeholder="描述一下您的家庭"
+                      />
+                    </div>
                   
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {submitting ? '保存中...' : '保存更改'}
-                    </button>
-                  </div>
-                </form>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="font-medium text-gray-800 mb-2">家庭统计</h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">家庭成员:</span>
+                          <span className="ml-2 font-medium">{children.length + 1} 人</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">创建时间:</span>
+                          <span className="ml-2 font-medium">{family?.created_at ? formatDate(family.created_at) : '-'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        {submitting ? '保存中...' : '保存更改'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             )}
 
@@ -621,9 +683,10 @@ export function Settings() {
                 </div>
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>
   )
 }
+
+export default Settings

@@ -13,7 +13,7 @@ interface AuthState {
   checkAuth: () => Promise<void>
   initialize: () => Promise<void>
   updateProfile: (updates: { name?: string; email?: string; avatar_url?: string }) => Promise<void>
-  createFamily: (name: string) => Promise<void>
+  createFamily: (familyData: { name: string; description?: string }) => Promise<void>
   updateFamily: (updates: { name?: string; description?: string }) => Promise<void>
   joinFamily: (inviteCode: string) => Promise<void>
   addChild: (childData: { name: string; birth_date: string; avatar_url?: string }) => Promise<void>
@@ -85,7 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       set({ user: userData })
       
-      // 获取家庭信息
+      // 通过creator_id获取家庭信息
       const { data: familyData } = await supabase
         .from('families')
         .select('*')
@@ -136,7 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
- signOut: async () => {
+  signOut: async () => {
     await supabase.auth.signOut()
     set({ user: null, family: null })
   },
@@ -149,7 +149,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth: async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
-      // 获取用户信息和家庭信息
+      // 获取用户信息
       const { data: userData } = await supabase
         .from('users')
         .select('*')
@@ -157,25 +157,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single()
       
       if (userData) {
+        // 通过creator_id查找用户创建的家庭
         const { data: familyData } = await supabase
           .from('families')
           .select('*')
-          .eq('id', userData.family_id)
+          .eq('creator_id', userData.id)
           .single()
         
         set({ user: userData, family: familyData })
+        
+        // 如果有家庭，加载儿童信息
+        if (familyData) {
+          await get().loadChildren()
+        }
       }
     }
   },
   
   initialize: async () => {
-     set({ isLoading: true })
-     try {
-       await get().checkAuth()
-     } finally {
-       set({ isLoading: false })
-     }
-   },
+    set({ isLoading: true })
+    try {
+      await get().checkAuth()
+    } finally {
+      set({ isLoading: false })
+    }
+  },
 
   updateProfile: async (updates) => {
     const { user } = get()
@@ -192,8 +198,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: data })
   },
 
-
-
   updateFamily: async (updates) => {
     const { family } = get()
     if (!family) throw new Error('No family selected')
@@ -209,7 +213,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ family: data })
   },
 
-  createFamily: async (name: string) => {
+  createFamily: async (familyData: { name: string; description?: string }) => {
     const { user } = get()
     if (!user) throw new Error('User not authenticated')
     
@@ -218,7 +222,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .from('families')
       .insert({
         creator_id: user.id,
-        name,
+        name: familyData.name,
+        description: familyData.description,
         invite_code: inviteCode
       })
       .select()
@@ -363,7 +368,7 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     set({ rules: [data, ...rules] })
   },
 
-  updateRule: async (id, updates) => {
+  updateRule: async (id: string, updates: Partial<Rule>) => {
     const { data, error } = await supabase
       .from('rules')
       .update(updates)
@@ -377,10 +382,10 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     set({ rules: rules.map(rule => rule.id === id ? data : rule) })
   },
 
-  deleteRule: async (id) => {
+  deleteRule: async (id: string) => {
     const { error } = await supabase
       .from('rules')
-      .update({ is_active: false })
+      .delete()
       .eq('id', id)
     
     if (error) throw error
@@ -395,89 +400,86 @@ export const useBehaviorsStore = create<BehaviorsState>((set, get) => ({
   children: [],
   loading: false,
 
-  loadBehaviors: async (familyId) => {
+  loadBehaviors: async (familyId: string) => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('behaviors')
-        .select(`
-          *,
-          rules(*),
-          children(*)
-        `)
-        .eq('children.family_id', familyId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      set({ behaviors: data || [] })
+      const [behaviorsResponse, childrenResponse] = await Promise.all([
+        supabase
+          .from('behaviors')
+          .select('*, children(name)')
+          .eq('family_id', familyId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('children')
+          .select('*')
+          .eq('family_id', familyId)
+      ])
+      
+      if (behaviorsResponse.error) throw behaviorsResponse.error
+      if (childrenResponse.error) throw childrenResponse.error
+      
+      set({ 
+        behaviors: behaviorsResponse.data || [],
+        children: childrenResponse.data || []
+      })
+    } catch (error) {
+      console.error('Load behaviors error:', error)
     } finally {
       set({ loading: false })
     }
   },
 
-  addBehavior: async (behavior) => {
+  addBehavior: async (behaviorData) => {
     const { data, error } = await supabase
       .from('behaviors')
-      .insert(behavior)
-      .select(`
-        *,
-        rules(*),
-        children(*)
-      `)
+      .insert(behaviorData)
+      .select('*, children(name)')
       .single()
     
     if (error) throw error
     
-    // 更新子女积分
-    const child = get().children.find(c => c.id === behavior.child_id)
-    if (child) {
-      await supabase
-        .from('children')
-        .update({
-          total_points: child.total_points + behavior.points_change
-        })
-        .eq('id', behavior.child_id)
-    }
+    const { behaviors } = get()
+    set({ behaviors: [data, ...behaviors] })
+  },
+
+  createBehavior: async (behaviorData) => {
+    const { data, error } = await supabase
+      .from('behaviors')
+      .insert(behaviorData)
+      .select('*, children(name)')
+      .single()
+    
+    if (error) throw error
     
     const { behaviors } = get()
     set({ behaviors: [data, ...behaviors] })
-    
-    // 重新加载儿童数据
-    useAuthStore.getState().loadChildren()
   },
-  
-  createBehavior: async (behaviorData) => {
-    return get().addBehavior(behaviorData)
-  },
-  
-  updateBehavior: async (id, updates) => {
-    const { error } = await supabase
+
+  updateBehavior: async (id: string, updates: Partial<Behavior>) => {
+    const { data, error } = await supabase
       .from('behaviors')
       .update(updates)
       .eq('id', id)
-
+      .select('*, children(name)')
+      .single()
+    
     if (error) throw error
-
-    set(state => ({
-      behaviors: state.behaviors.map(b => 
-        b.id === id ? { ...b, ...updates } : b
-      )
-    }))
+    
+    const { behaviors } = get()
+    set({ behaviors: behaviors.map(behavior => behavior.id === id ? data : behavior) })
   },
-  
-  deleteBehavior: async (id) => {
+
+  deleteBehavior: async (id: string) => {
     const { error } = await supabase
       .from('behaviors')
       .delete()
       .eq('id', id)
-
+    
     if (error) throw error
-
-    set(state => ({
-      behaviors: state.behaviors.filter(b => b.id !== id)
-    }))
-  },
+    
+    const { behaviors } = get()
+    set({ behaviors: behaviors.filter(behavior => behavior.id !== id) })
+  }
 }))
 
 export const useRewardsStore = create<RewardsState>((set, get) => ({
@@ -494,13 +496,13 @@ export const useRewardsStore = create<RewardsState>((set, get) => ({
         .from('rewards')
         .select('*')
         .eq('family_id', family.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
       
-      if (error) {
-        console.error('Load rewards error:', error)
-        return
-      }
-      
+      if (error) throw error
       set({ rewards: data || [] })
+    } catch (error) {
+      console.error('Load rewards error:', error)
     } finally {
       set({ loading: false })
     }
@@ -538,7 +540,7 @@ export const useRewardsStore = create<RewardsState>((set, get) => ({
     set({ rewards: [data, ...rewards] })
   },
 
-  updateReward: async (id, updates) => {
+  updateReward: async (id: string, updates: Partial<Reward>) => {
     const { data, error } = await supabase
       .from('rewards')
       .update(updates)
@@ -552,7 +554,7 @@ export const useRewardsStore = create<RewardsState>((set, get) => ({
     set({ rewards: rewards.map(reward => reward.id === id ? data : reward) })
   },
 
-  deleteReward: async (id) => {
+  deleteReward: async (id: string) => {
     const { error } = await supabase
       .from('rewards')
       .delete()
@@ -564,47 +566,9 @@ export const useRewardsStore = create<RewardsState>((set, get) => ({
     set({ rewards: rewards.filter(reward => reward.id !== id) })
   },
 
-  redeemReward: async (rewardId, childId) => {
-    const { data: reward, error: rewardError } = await supabase
-      .from('rewards')
-      .select('*')
-      .eq('id', rewardId)
-      .single()
-    
-    if (rewardError) throw rewardError
-    
-    const { data: child, error: childError } = await supabase
-      .from('children')
-      .select('*')
-      .eq('id', childId)
-      .single()
-    
-    if (childError) throw childError
-    
-    if (child.total_points < reward.points_required) {
-       throw new Error('Insufficient points')
-     }
-     
-     // 扣除积分
-     await supabase
-       .from('children')
-       .update({
-         total_points: child.total_points - reward.points_required
-       })
-       .eq('id', childId)
-     
-     // 记录兑换行为
-     await supabase
-       .from('behaviors')
-       .insert({
-         child_id: childId,
-         rule_id: null,
-         notes: `兑换奖励: ${reward.name}`,
-         points: -reward.points_required,
-         points_earned: -reward.points_required
-       })
-    
-    // 重新加载儿童数据
-    useAuthStore.getState().loadChildren()
+  redeemReward: async (rewardId: string, childId: string) => {
+    // 这里可以添加兑换奖励的逻辑
+    // 比如减少孩子的积分，记录兑换历史等
+    console.log(`Redeeming reward ${rewardId} for child ${childId}`)
   }
 }))

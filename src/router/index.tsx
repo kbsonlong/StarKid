@@ -7,7 +7,7 @@ import { Rules } from '../pages/Rules'
 import { Behaviors } from '../pages/Behaviors'
 import { Rewards } from '../pages/Rewards'
 import { Reports } from '../pages/Reports'
-import { Settings } from '../pages/Settings'
+import Settings from '../pages/Settings'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export const router = createBrowserRouter([
