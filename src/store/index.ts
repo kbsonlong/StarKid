@@ -78,12 +78,14 @@ interface AuthState {
   children: Child[]
   selectedChild: Child | null
   isLoading: boolean
+  authListener: any
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
   signOut: () => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   initialize: () => Promise<void>
+  cleanup: () => void
   updateProfile: (updates: { name?: string; email?: string; avatar_url?: string }) => Promise<void>
   createFamily: (familyData: { name: string; description?: string }) => Promise<void>
   updateFamily: (updates: { name?: string; description?: string }) => Promise<void>
@@ -94,6 +96,8 @@ interface AuthState {
   loadChildren: () => Promise<void>
   setSelectedChild: (child: Child | null) => void
   generateInviteCode: () => Promise<string>
+  getJoinRequests: () => Promise<any[]>
+  approveJoinRequest: (requestId: string, approved: boolean) => Promise<string>
 }
 
 interface RulesState {
@@ -112,7 +116,7 @@ interface BehaviorsState {
   loading: boolean
   loadBehaviors: (familyId: string) => Promise<void>
   addBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<void>
-  createBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<void>
+  createBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<Behavior>
   updateBehavior: (id: string, updates: Partial<Behavior>) => Promise<void>
   deleteBehavior: (id: string) => Promise<void>
 }
@@ -199,6 +203,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   children: [],
   selectedChild: null,
   isLoading: false,
+  authListener: null,
 
   login: async (email: string, password: string) => {
     set({ isLoading: true })
@@ -375,8 +380,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true })
     try {
       await get().checkAuth()
+      
+      // 清理之前的监听器（如果存在）
+      const currentListener = get().authListener
+      if (currentListener) {
+        currentListener.unsubscribe()
+      }
+      
+      // 添加认证状态监听器
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('=== 认证状态变化 ===', { event, session })
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // 用户登录或token刷新时，重新检查认证状态
+          await get().checkAuth()
+        } else if (event === 'SIGNED_OUT') {
+          // 用户登出时，清除状态
+          set({ user: null, family: null, children: [], selectedChild: null })
+        }
+      })
+      
+      // 保存监听器引用
+      set({ authListener })
     } finally {
       set({ isLoading: false })
+    }
+  },
+
+  cleanup: () => {
+    const currentListener = get().authListener
+    if (currentListener) {
+      currentListener.unsubscribe()
+      set({ authListener: null })
     }
   },
 
@@ -434,19 +469,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get()
     if (!user) throw new Error('User not authenticated')
     
-    // 检查用户认证状态
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    console.log('joinFamily: 开始申请加入家庭，邀请码:', inviteCode)
     
-    if (sessionError) {
-      console.error('获取会话失败:', sessionError)
-      throw new Error('认证状态检查失败，请重新登录')
-    }
-    
-    if (!session?.user) {
-      throw new Error('用户未登录，请先登录后再加入家庭')
-    }
-    
-    // 查找家庭
     const { data: familyData, error: familyError } = await supabase
       .from('families')
       .select('*')
@@ -484,26 +508,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw new Error('您已经是该家庭的成员')
     }
     
-    // 将用户添加到家庭成员表
-    const { error: memberError } = await supabase
-      .from('family_members')
+    // 检查是否已有待审核的申请
+    const { data: existingRequest, error: requestCheckError } = await supabase
+      .from('join_requests')
+      .select('*')
+      .eq('family_id', familyData.id)
+      .eq('user_id', user.id)
+      .eq('status', 'pending')
+      .single()
+    
+    if (requestCheckError && requestCheckError.code !== 'PGRST116') {
+      console.error('Request check error:', requestCheckError)
+      throw new Error(`检查申请状态失败: ${requestCheckError.message}`)
+    }
+    
+    if (existingRequest) {
+      throw new Error('您已提交过加入申请，请等待家庭管理员审核')
+    }
+    
+    // 创建加入申请
+    const { error: requestError } = await supabase
+      .from('join_requests')
       .insert({
         family_id: familyData.id,
         user_id: user.id,
-        role: 'parent',
-        permissions: ['view_children', 'manage_behaviors', 'manage_rewards']
+        user_name: user.name || user.email,
+        user_email: user.email,
+        status: 'pending',
+        message: `申请加入家庭：${familyData.name}`
       })
     
-    if (memberError) {
-      console.error('Member insert error:', memberError)
-      throw new Error(`加入家庭失败: ${memberError.message}`)
+    if (requestError) {
+      console.error('Request insert error:', requestError)
+      throw new Error(`提交申请失败: ${requestError.message}`)
     }
     
-    console.log('Successfully joined family:', familyData.name)
-    set({ family: familyData })
-    console.log('joinFamily: 开始加载儿童数据')
-    await get().loadChildren()
-    console.log('joinFamily: 儿童数据加载完成')
+    console.log('Successfully submitted join request for family:', familyData.name)
+    throw new Error('申请已提交，请等待家庭管理员审核。审核通过后您将收到通知。')
   },
 
   addChild: async (childData) => {
@@ -594,6 +635,70 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     set({ family: { ...family, invite_code: newInviteCode } })
     return newInviteCode
+  },
+
+  // 获取待审核的加入申请
+  getJoinRequests: async () => {
+    const { family } = get()
+    if (!family) throw new Error('No family selected')
+    
+    const { data, error } = await supabase
+      .from('join_requests')
+      .select('*')
+      .eq('family_id', family.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
+  },
+
+  // 审核加入申请
+  approveJoinRequest: async (requestId: string, approved: boolean) => {
+    const { user } = get()
+    if (!user) throw new Error('User not authenticated')
+    
+    // 获取申请详情
+    const { data: request, error: requestError } = await supabase
+      .from('join_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single()
+    
+    if (requestError) throw new Error(`获取申请信息失败: ${requestError.message}`)
+    if (!request) throw new Error('申请不存在')
+    
+    if (approved) {
+      // 审核通过：将用户添加到家庭成员表
+      const { error: memberError } = await supabase
+        .from('family_members')
+        .insert({
+          family_id: request.family_id,
+          user_id: request.user_id,
+          role: 'parent',
+          permissions: ['view_children', 'manage_behaviors', 'manage_rewards']
+        })
+      
+      if (memberError) {
+        throw new Error(`添加家庭成员失败: ${memberError.message}`)
+      }
+    }
+    
+    // 更新申请状态
+    const { error: updateError } = await supabase
+      .from('join_requests')
+      .update({
+        status: approved ? 'approved' : 'rejected',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+    
+    if (updateError) {
+      throw new Error(`更新申请状态失败: ${updateError.message}`)
+    }
+    
+    return approved ? '申请已通过' : '申请已拒绝'
   }
 }))
 
@@ -693,7 +798,12 @@ export const useBehaviorsStore = create<BehaviorsState>((set, get) => ({
       const [behaviorsResponse, childrenResponse] = await Promise.all([
         supabase
           .from('behaviors')
-          .select('*, children(name)')
+          .select(`
+            *,
+            children(name),
+            rules(name, type, category),
+            behavior_images(id, image_url, storage_path)
+          `)
           .eq('family_id', familyId)
           .order('created_at', { ascending: false }),
         supabase
@@ -720,26 +830,38 @@ export const useBehaviorsStore = create<BehaviorsState>((set, get) => ({
     const { data, error } = await supabase
       .from('behaviors')
       .insert(behaviorData)
-      .select('*, children(name)')
+      .select(`
+        *,
+        children(name),
+        rules(name, type, category),
+        behavior_images(id, image_url, storage_path)
+      `)
       .single()
     
     if (error) throw error
     
     const { behaviors } = get()
     set({ behaviors: [data, ...behaviors] })
+    return data
   },
 
   createBehavior: async (behaviorData) => {
     const { data, error } = await supabase
       .from('behaviors')
       .insert(behaviorData)
-      .select('*, children(name)')
+      .select(`
+        *,
+        children(name),
+        rules(name, type, category),
+        behavior_images(id, image_url, storage_path)
+      `)
       .single()
     
     if (error) throw error
     
     const { behaviors } = get()
     set({ behaviors: [data, ...behaviors] })
+    return data
   },
 
   updateBehavior: async (id: string, updates: Partial<Behavior>) => {

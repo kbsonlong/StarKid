@@ -7,7 +7,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: {
+      getItem: (key: string) => {
+        return localStorage.getItem(key)
+      },
+      setItem: (key: string, value: string) => {
+        localStorage.setItem(key, value)
+      },
+      removeItem: (key: string) => {
+        localStorage.removeItem(key)
+      }
+    },
+    // 设置会话过期时间为24小时（86400秒）
+    sessionRefreshMargin: 60, // 提前60秒刷新token
+    // 自定义会话过期时间
+    flowType: 'pkce'
+  }
+})
 
 // 数据库表类型定义
 export interface User {
@@ -61,13 +82,20 @@ export interface Behavior {
   child_id: string
   rule_id: string
   notes?: string
-  note?: string
-  points: number
   points_change: number
-  points_earned: number
+  has_image?: boolean
   created_at: string
   rules?: Rule
   children?: Child
+  behavior_images?: BehaviorImage[]
+}
+
+export interface BehaviorImage {
+  id: string
+  behavior_id: string
+  image_url: string
+  storage_path: string
+  created_at: string
 }
 
 export interface Reward {

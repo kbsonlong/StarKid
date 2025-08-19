@@ -103,7 +103,7 @@ export function Reports() {
         return rule?.type === 'punishment'
       }).length
       
-      const points = dayBehaviors.reduce((sum, b) => sum + b.points_earned, 0)
+      const points = dayBehaviors.reduce((sum, b) => sum + b.points_change, 0)
       
       stats.push({
         date: dateStr,
@@ -129,7 +129,7 @@ export function Reports() {
       }).length
       
       const positiveRate = totalBehaviors > 0 ? (positiveBehaviors / totalBehaviors) * 100 : 0
-      const totalPoints = childBehaviors.reduce((sum, b) => sum + b.points_earned, 0)
+      const totalPoints = childBehaviors.reduce((sum, b) => sum + b.points_change, 0)
       const averagePoints = totalBehaviors > 0 ? totalPoints / totalBehaviors : 0
       
       // 计算趋势（简化版本，比较前后两周）
@@ -163,7 +163,7 @@ export function Reports() {
       const rule = rules.find(r => r.id === b.rule_id)
       return rule?.type === 'reward'
     }).length
-    const totalPoints = filteredBehaviors.reduce((sum, b) => sum + b.points_earned, 0)
+    const totalPoints = filteredBehaviors.reduce((sum, b) => sum + b.points_change, 0)
     const averagePointsPerDay = dailyStats.reduce((sum, s) => sum + s.points, 0) / dailyStats.length || 0
     
     return {

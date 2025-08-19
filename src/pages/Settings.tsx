@@ -147,7 +147,7 @@ function Settings() {
       setShowJoinFamily(false)
       setInviteCode('')
       // 显示成功提示
-      toast.success('成功加入家庭！')
+      toast.success('加入申请已提交，请等待家庭管理员审核！')
     } catch (error: any) {
       console.error('Join family error:', error)
       
@@ -156,10 +156,12 @@ function Settings() {
         setJoinError('邀请码不存在或已过期，请向家庭管理员确认邀请码是否正确')
       } else if (error.message?.includes('已经是该家庭的成员')) {
         setJoinError('您已经是该家庭的成员了')
+      } else if (error.message?.includes('已提交申请')) {
+        setJoinError('您已经提交过加入申请，请等待管理员审核')
       } else if (error.message?.includes('网络')) {
         setJoinError('网络连接失败，请检查网络后重试')
       } else {
-        setJoinError(error.message || '加入家庭失败，请稍后重试或联系技术支持')
+        setJoinError(error.message || '提交申请失败，请稍后重试或联系技术支持')
       }
     } finally {
       setSubmitting(false)
@@ -218,31 +220,31 @@ function Settings() {
   const isParent = user?.role === 'parent'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 xs:space-y-6 px-4 xs:px-0">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">设置</h1>
-        <p className="text-gray-600 mt-1">管理您的账户、家庭和应用偏好设置</p>
+        <h1 className="text-xl xs:text-2xl font-bold text-gray-800">设置</h1>
+        <p className="text-sm xs:text-base text-gray-600 mt-1">管理您的账户、家庭和应用偏好设置</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 xs:gap-6">
         {/* 侧边栏导航 */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-sm p-4">
-            <nav className="space-y-2">
+          <div className="bg-white rounded-xl shadow-sm p-3 xs:p-4">
+            <nav className="space-y-1 xs:space-y-2">
               {tabs.map(tab => {
                 const Icon = tab.icon
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`w-full flex items-center px-3 py-2 text-left rounded-lg transition-colors ${
+                    className={`w-full flex items-center px-2 xs:px-3 py-2 text-left rounded-lg transition-colors text-sm xs:text-base ${
                       activeTab === tab.id
                         ? 'bg-yellow-500 text-white'
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    <Icon className="h-5 w-5 mr-3" />
+                    <Icon className="h-4 w-4 xs:h-5 xs:w-5 mr-2 xs:mr-3" />
                     {tab.label}
                   </button>
                 )
@@ -252,37 +254,37 @@ function Settings() {
         </div>
 
         {/* 主要内容区域 */}
-        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm p-6">
+        <div className="lg:col-span-3 bg-white rounded-xl shadow-sm p-4 xs:p-6">
             {/* 个人资料 */}
             {activeTab === 'profile' && (
               <div>
-                <h2 className="text-lg font-semibold text-gray-800 mb-6">个人资料</h2>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4 xs:mb-6">个人资料</h2>
                 
-                <form onSubmit={handleProfileSubmit} className="space-y-6">
-                  <div className="flex items-center space-x-6">
-                    <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center">
+                <form onSubmit={handleProfileSubmit} className="space-y-4 xs:space-y-6">
+                  <div className="flex flex-col xs:flex-row xs:items-center space-y-4 xs:space-y-0 xs:space-x-6">
+                    <div className="w-16 h-16 xs:w-20 xs:h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto xs:mx-0">
                       {profileData.avatar_url ? (
                         <img 
                           src={profileData.avatar_url} 
                           alt="头像" 
-                          className="w-20 h-20 rounded-full object-cover"
+                          className="w-16 h-16 xs:w-20 xs:h-20 rounded-full object-cover"
                         />
                       ) : (
-                        <User className="h-8 w-8 text-gray-400" />
+                        <User className="h-6 w-6 xs:h-8 xs:w-8 text-gray-400" />
                       )}
                     </div>
-                    <div>
+                    <div className="text-center xs:text-left">
                       <button 
                         type="button"
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                        className="w-full xs:w-auto px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm xs:text-base"
                       >
                         更换头像
                       </button>
-                      <p className="text-sm text-gray-500 mt-1">支持 JPG、PNG 格式，建议尺寸 200x200</p>
+                      <p className="text-xs xs:text-sm text-gray-500 mt-1">支持 JPG、PNG 格式，建议尺寸 200x200</p>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-4 xs:gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         姓名
@@ -333,11 +335,11 @@ function Settings() {
                     </span>
                   </div>
                   
-                  <div className="flex justify-end">
+                  <div className="flex justify-center xs:justify-end">
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                      className="w-full xs:w-auto inline-flex items-center justify-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {submitting ? '保存中...' : '保存更改'}
@@ -350,13 +352,13 @@ function Settings() {
             {/* 家庭信息 */}
             {activeTab === 'family' && isParent && (
               <div>
-                <h2 className="text-lg font-semibold text-gray-800 mb-6">家庭信息</h2>
+                <h2 className="text-lg font-semibold text-gray-800 mb-4 xs:mb-6">家庭信息</h2>
                 
                 {!family ? (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">还没有加入家庭</h3>
-                    <p className="text-gray-600 mb-6">您可以创建新家庭或通过邀请码加入现有家庭</p>
+                  <div className="text-center py-6 xs:py-8">
+                    <Users className="h-10 w-10 xs:h-12 xs:w-12 text-gray-300 mx-auto mb-3 xs:mb-4" />
+                    <h3 className="text-base xs:text-lg font-medium text-gray-800 mb-2">还没有加入家庭</h3>
+                    <p className="text-sm xs:text-base text-gray-600 mb-4 xs:mb-6">您可以创建新家庭或通过邀请码加入现有家庭</p>
                     
                     {/* 选择操作 */}
                     {!showJoinFamily ? (
@@ -472,7 +474,7 @@ function Settings() {
                               className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50 mb-2"
                             >
                               <UserPlus className="h-4 w-4 mr-2" />
-                              {submitting ? '加入中...' : '加入家庭'}
+                              {submitting ? '提交中...' : '申请加入'}
                             </button>
                             
                             {/* 临时调试按钮 */}
@@ -642,11 +644,11 @@ function Settings() {
             {/* 儿童管理 */}
             {activeTab === 'children' && isParent && (
               <div>
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between mb-4 xs:mb-6 space-y-3 xs:space-y-0">
                   <h2 className="text-lg font-semibold text-gray-800">儿童管理</h2>
                   <button
                     onClick={() => setShowChildForm(true)}
-                    className="inline-flex items-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                    className="w-full xs:w-auto inline-flex items-center justify-center px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors text-sm xs:text-base"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     添加儿童
@@ -720,66 +722,66 @@ function Settings() {
                 )}
                 
                 {/* 儿童列表 */}
-                <div className="space-y-4">
+                <div className="space-y-3 xs:space-y-4">
                   {children.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Baby className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500">还没有添加儿童信息</p>
-                      <p className="text-gray-400 text-sm mt-1">点击上方按钮添加第一个儿童</p>
+                    <div className="text-center py-6 xs:py-8">
+                      <Baby className="h-10 w-10 xs:h-12 xs:w-12 text-gray-300 mx-auto mb-3 xs:mb-4" />
+                      <p className="text-sm xs:text-base text-gray-500">还没有添加儿童信息</p>
+                      <p className="text-xs xs:text-sm text-gray-400 mt-1">点击上方按钮添加第一个儿童</p>
                     </div>
                   ) : (
                     children.map(child => (
                       <div key={child.id} className="border border-gray-200 rounded-lg overflow-hidden">
                         {/* 儿童基本信息 */}
-                        <div className="flex items-center justify-between p-4">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <div className="flex items-center justify-between p-3 xs:p-4">
+                          <div className="flex items-center space-x-3 xs:space-x-4">
+                            <div className="w-10 h-10 xs:w-12 xs:h-12 bg-yellow-100 rounded-full flex items-center justify-center">
                               {child.avatar_url ? (
                                 <img 
                                   src={child.avatar_url} 
                                   alt={child.name} 
-                                  className="w-12 h-12 rounded-full object-cover"
+                                  className="w-10 h-10 xs:w-12 xs:h-12 rounded-full object-cover"
                                 />
                               ) : (
-                                <Baby className="h-6 w-6 text-yellow-600" />
+                                <Baby className="h-5 w-5 xs:h-6 xs:w-6 text-yellow-600" />
                               )}
                             </div>
                             <div>
-                              <h4 className="font-medium text-gray-800">{child.name}</h4>
-                              <p className="text-sm text-gray-600">
+                              <h4 className="text-sm xs:text-base font-medium text-gray-800">{child.name}</h4>
+                              <p className="text-xs xs:text-sm text-gray-600">
                                 {calculateAge(child.birth_date)} 岁 · 总积分: {child.total_points}
                               </p>
                             </div>
                           </div>
                           
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1 xs:space-x-2">
                             <button
                               onClick={() => handleChildEdit(child)}
-                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                              className="p-1.5 xs:p-2 text-gray-400 hover:text-blue-600 transition-colors"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3.5 w-3.5 xs:h-4 xs:w-4" />
                             </button>
                             <button
                               onClick={() => handleChildDelete(child)}
-                              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                              className="p-1.5 xs:p-2 text-gray-400 hover:text-red-600 transition-colors"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5 xs:h-4 xs:w-4" />
                             </button>
                           </div>
                         </div>
                         
                         {/* 儿童邀请码区域 */}
-                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-t border-gray-200 p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h5 className="text-sm font-medium text-purple-900 mb-1">社交邀请码</h5>
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-t border-gray-200 p-3 xs:p-4">
+                          <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between space-y-3 xs:space-y-0">
+                            <div className="flex-1">
+                              <h5 className="text-xs xs:text-sm font-medium text-purple-900 mb-1">社交邀请码</h5>
                               <p className="text-xs text-purple-700">
                                 其他小朋友可以使用此邀请码添加 {child.name} 为好友
                               </p>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <div className="bg-white px-3 py-2 rounded-lg border border-purple-200">
-                                <code className="text-sm font-mono text-purple-800">
+                              <div className="bg-white px-2 xs:px-3 py-1.5 xs:py-2 rounded-lg border border-purple-200">
+                                <code className="text-xs xs:text-sm font-mono text-purple-800">
                                   {child.child_invite_code || '生成中...'}
                                 </code>
                               </div>
@@ -790,10 +792,10 @@ function Settings() {
                                     // 这里可以添加复制成功的提示
                                   }
                                 }}
-                                className="p-2 text-purple-600 hover:text-purple-800 transition-colors"
+                                className="p-1.5 xs:p-2 text-purple-600 hover:text-purple-800 transition-colors"
                                 title="复制邀请码"
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <UserPlus className="h-3.5 w-3.5 xs:h-4 xs:w-4" />
                               </button>
                             </div>
                           </div>

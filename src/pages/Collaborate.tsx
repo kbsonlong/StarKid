@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff } from 'lucide-react';
+import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff, UserCheck } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
+import { JoinRequestsManager } from '../components/JoinRequestsManager';
 
 interface FamilyMember {
   id: string;
@@ -52,7 +53,7 @@ interface PendingReward {
 
 const Collaborate: React.FC = () => {
   const { user, family, generateInviteCode } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'members' | 'permissions' | 'approvals'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'permissions' | 'approvals' | 'join-requests'>('members');
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [pendingBehaviors, setPendingBehaviors] = useState<PendingBehavior[]>([]);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
@@ -280,10 +281,10 @@ const Collaborate: React.FC = () => {
   if (!family) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
-        <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6 text-center">
-          <Users className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">创建或加入家庭</h2>
-          <p className="text-gray-600">请先在设置页面创建或加入一个家庭来使用协作功能</p>
+        <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-4 xs:p-6 text-center">
+          <Users className="w-12 h-12 xs:w-16 xs:h-16 text-blue-500 mx-auto mb-3 xs:mb-4" />
+          <h2 className="text-lg xs:text-xl font-bold text-gray-800 mb-2">创建或加入家庭</h2>
+          <p className="text-sm xs:text-base text-gray-600">请先在设置页面创建或加入一个家庭来使用协作功能</p>
         </div>
       </div>
     );
@@ -343,13 +344,13 @@ const Collaborate: React.FC = () => {
 
           {/* 邀请码区域 */}
           {canManageMembers && (
-            <div className="bg-blue-50 rounded-lg p-4 mb-4">
-              <div className="flex items-center justify-between">
+            <div className="bg-blue-50 rounded-lg p-3 xs:p-4 mb-4">
+              <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between space-y-3 xs:space-y-0">
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-gray-800 mb-1">家庭邀请码</h3>
-                  <div className="flex items-center space-x-3">
+                  <div className="flex flex-col xs:flex-row xs:items-center space-y-2 xs:space-y-0 xs:space-x-3">
                     <div className="flex items-center space-x-2">
-                      <code className={`px-3 py-1 bg-white rounded border text-lg font-mono ${
+                      <code className={`px-2 xs:px-3 py-1 bg-white rounded border text-base xs:text-lg font-mono ${
                         showInviteCode ? 'text-gray-800' : 'text-transparent bg-gray-200'
                       }`}>
                         {showInviteCode ? inviteCode : '••••••••'}
@@ -358,15 +359,15 @@ const Collaborate: React.FC = () => {
                         onClick={() => setShowInviteCode(!showInviteCode)}
                         className="p-1 text-gray-500 hover:text-gray-700"
                       >
-                        {showInviteCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {showInviteCode ? <EyeOff className="w-3.5 h-3.5 xs:w-4 xs:h-4" /> : <Eye className="w-3.5 h-3.5 xs:w-4 xs:h-4" />}
                       </button>
                     </div>
                     {showInviteCode && (
                       <button
                         onClick={copyInviteCode}
-                        className="flex items-center space-x-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                        className="flex items-center justify-center space-x-1 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 w-full xs:w-auto"
                       >
-                        {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {copiedCode ? <Check className="w-3.5 h-3.5 xs:w-4 xs:h-4" /> : <Copy className="w-3.5 h-3.5 xs:w-4 xs:h-4" />}
                         <span>{copiedCode ? '已复制' : '复制'}</span>
                       </button>
                     )}
@@ -375,7 +376,7 @@ const Collaborate: React.FC = () => {
                 <button
                   onClick={generateNewInviteCode}
                   disabled={loading}
-                  className="px-4 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 disabled:opacity-50"
+                  className="w-full xs:w-auto px-4 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 disabled:opacity-50"
                 >
                   重新生成
                 </button>
@@ -418,6 +419,19 @@ const Collaborate: React.FC = () => {
               <Settings className="w-4 h-4 inline mr-2" />
               待审核 ({pendingBehaviors.length + pendingRewards.length})
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('join-requests')}
+                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'join-requests'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <UserCheck className="w-4 h-4 inline mr-2" />
+                加入申请
+              </button>
+            )}
           </div>
         </div>
 
@@ -481,14 +495,14 @@ const Collaborate: React.FC = () => {
 
           {activeTab === 'permissions' && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">权限说明</h3>
-              <div className="space-y-4">
-                <div className="p-4 border border-gray-200 rounded-lg">
+              <h3 className="text-base xs:text-lg font-semibold text-gray-800 mb-3 xs:mb-4">权限说明</h3>
+              <div className="space-y-3 xs:space-y-4">
+                <div className="p-3 xs:p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Crown className="w-5 h-5 text-yellow-500" />
-                    <h4 className="font-medium text-gray-800">家长</h4>
+                    <Crown className="w-4 h-4 xs:w-5 xs:h-5 text-yellow-500" />
+                    <h4 className="text-sm xs:text-base font-medium text-gray-800">家长</h4>
                   </div>
-                  <ul className="text-sm text-gray-600 space-y-1 ml-7">
+                  <ul className="text-xs xs:text-sm text-gray-600 space-y-1 ml-6 xs:ml-7">
                     <li>• 管理家庭成员和权限</li>
                     <li>• 生成和管理邀请码</li>
                     <li>• 审核所有行为和奖励申请</li>
@@ -497,12 +511,12 @@ const Collaborate: React.FC = () => {
                   </ul>
                 </div>
                 
-                <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="p-3 xs:p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Users className="w-5 h-5 text-green-500" />
-                    <h4 className="font-medium text-gray-800">监护人</h4>
+                    <Users className="w-4 h-4 xs:w-5 xs:h-5 text-green-500" />
+                    <h4 className="text-sm xs:text-base font-medium text-gray-800">监护人</h4>
                   </div>
-                  <ul className="text-sm text-gray-600 space-y-1 ml-7">
+                  <ul className="text-xs xs:text-sm text-gray-600 space-y-1 ml-6 xs:ml-7">
                     <li>• 记录孩子的行为表现</li>
                     <li>• 审核行为和奖励申请</li>
                     <li>• 查看孩子的成长数据</li>
@@ -511,12 +525,12 @@ const Collaborate: React.FC = () => {
                   </ul>
                 </div>
                 
-                <div className="p-4 border border-gray-200 rounded-lg">
+                <div className="p-3 xs:p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Eye className="w-5 h-5 text-gray-500" />
-                    <h4 className="font-medium text-gray-800">成员</h4>
+                    <Eye className="w-4 h-4 xs:w-5 xs:h-5 text-gray-500" />
+                    <h4 className="text-sm xs:text-base font-medium text-gray-800">成员</h4>
                   </div>
-                  <ul className="text-sm text-gray-600 space-y-1 ml-7">
+                  <ul className="text-xs xs:text-sm text-gray-600 space-y-1 ml-6 xs:ml-7">
                     <li>• 查看孩子的基本信息</li>
                     <li>• 查看行为记录和积分</li>
                     <li>• 查看成长统计数据</li>
@@ -527,46 +541,50 @@ const Collaborate: React.FC = () => {
             </div>
           )}
 
+          {activeTab === 'join-requests' && (
+            <JoinRequestsManager />
+          )}
+
           {activeTab === 'approvals' && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">待审核项目</h3>
+              <h3 className="text-base xs:text-lg font-semibold text-gray-800 mb-3 xs:mb-4">待审核项目</h3>
               
               {/* 待审核行为 */}
               {pendingBehaviors.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-3">待审核行为 ({pendingBehaviors.length})</h4>
-                  <div className="space-y-3">
+                <div className="mb-4 xs:mb-6">
+                  <h4 className="text-sm xs:text-base font-medium text-gray-800 mb-2 xs:mb-3">待审核行为 ({pendingBehaviors.length})</h4>
+                  <div className="space-y-2 xs:space-y-3">
                     {pendingBehaviors.map((behavior) => (
-                      <div key={behavior.id} className="p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-start justify-between">
+                      <div key={behavior.id} className="p-3 xs:p-4 border border-gray-200 rounded-lg">
+                        <div className="flex flex-col xs:flex-row xs:items-start xs:justify-between space-y-3 xs:space-y-0">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className={`px-2 py-1 text-xs rounded-full ${
                                 behavior.type === 'positive' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
                                 {behavior.type === 'positive' ? '正面行为' : '负面行为'}
                               </span>
-                              <span className="text-sm text-gray-600">{behavior.child?.name || '未知孩子'}</span>
-                              <span className="text-sm text-gray-500">记录者: {behavior.recorder?.name || '未知记录者'}</span>
+                              <span className="text-xs xs:text-sm text-gray-600">{behavior.child?.name || '未知孩子'}</span>
+                              <span className="text-xs xs:text-sm text-gray-500">记录者: {behavior.recorder?.name || '未知记录者'}</span>
                             </div>
-                            <p className="text-gray-800 mb-1">{behavior.description}</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm xs:text-base text-gray-800 mb-1">{behavior.description}</p>
+                            <p className="text-xs xs:text-sm text-gray-600">
                               积分: {behavior.type === 'positive' ? '+' : ''}{behavior.points} | 
                               时间: {new Date(behavior.created_at).toLocaleString()}
                             </p>
                           </div>
-                          <div className="flex space-x-2 ml-4">
+                          <div className="flex space-x-2 xs:ml-4">
                             <button
                               onClick={() => approveBehavior(behavior.id, true)}
                               disabled={loading}
-                              className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 disabled:opacity-50"
+                              className="flex-1 xs:flex-none px-3 py-1.5 xs:py-1 bg-green-500 text-white text-xs xs:text-sm rounded hover:bg-green-600 disabled:opacity-50"
                             >
                               通过
                             </button>
                             <button
                               onClick={() => approveBehavior(behavior.id, false)}
                               disabled={loading}
-                              className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 disabled:opacity-50"
+                              className="flex-1 xs:flex-none px-3 py-1.5 xs:py-1 bg-red-500 text-white text-xs xs:text-sm rounded hover:bg-red-600 disabled:opacity-50"
                             >
                               拒绝
                             </button>
@@ -581,33 +599,33 @@ const Collaborate: React.FC = () => {
               {/* 待审核奖励 */}
               {pendingRewards.length > 0 && (
                 <div>
-                  <h4 className="font-medium text-gray-800 mb-3">待审核奖励 ({pendingRewards.length})</h4>
-                  <div className="space-y-3">
+                  <h4 className="text-sm xs:text-base font-medium text-gray-800 mb-2 xs:mb-3">待审核奖励 ({pendingRewards.length})</h4>
+                  <div className="space-y-2 xs:space-y-3">
                     {pendingRewards.map((reward) => (
-                      <div key={reward.id} className="p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-start justify-between">
+                      <div key={reward.id} className="p-3 xs:p-4 border border-gray-200 rounded-lg">
+                        <div className="flex flex-col xs:flex-row xs:items-start xs:justify-between space-y-3 xs:space-y-0">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <span className="text-sm text-gray-600">{reward.child?.name || '未知孩子'}</span>
-                              <span className="text-sm text-gray-500">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-xs xs:text-sm text-gray-600">{reward.child?.name || '未知孩子'}</span>
+                              <span className="text-xs xs:text-sm text-gray-500">
                                 申请时间: {new Date(reward.created_at).toLocaleString()}
                               </span>
                             </div>
-                            <p className="text-gray-800 mb-1">{reward.name}</p>
-                            <p className="text-sm text-gray-600">需要积分: {reward.points_cost}</p>
+                            <p className="text-sm xs:text-base text-gray-800 mb-1">{reward.name}</p>
+                            <p className="text-xs xs:text-sm text-gray-600">需要积分: {reward.points_cost}</p>
                           </div>
-                          <div className="flex space-x-2 ml-4">
+                          <div className="flex space-x-2 xs:ml-4">
                             <button
                               onClick={() => approveReward(reward.id, true)}
                               disabled={loading}
-                              className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 disabled:opacity-50"
+                              className="flex-1 xs:flex-none px-3 py-1.5 xs:py-1 bg-green-500 text-white text-xs xs:text-sm rounded hover:bg-green-600 disabled:opacity-50"
                             >
                               通过
                             </button>
                             <button
                               onClick={() => approveReward(reward.id, false)}
                               disabled={loading}
-                              className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 disabled:opacity-50"
+                              className="flex-1 xs:flex-none px-3 py-1.5 xs:py-1 bg-red-500 text-white text-xs xs:text-sm rounded hover:bg-red-600 disabled:opacity-50"
                             >
                               拒绝
                             </button>
@@ -620,9 +638,9 @@ const Collaborate: React.FC = () => {
               )}
               
               {pendingBehaviors.length === 0 && pendingRewards.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <Settings className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>暂无待审核项目</p>
+                <div className="text-center py-6 xs:py-8 text-gray-500">
+                  <Settings className="w-10 h-10 xs:w-12 xs:h-12 mx-auto mb-2 xs:mb-3 opacity-50" />
+                  <p className="text-sm xs:text-base">暂无待审核项目</p>
                 </div>
               )}
             </div>
