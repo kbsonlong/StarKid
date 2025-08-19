@@ -485,7 +485,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     console.log('Successfully joined family:', familyData.name)
     set({ family: familyData })
+    console.log('joinFamily: 开始加载儿童数据')
     await get().loadChildren()
+    console.log('joinFamily: 儿童数据加载完成')
   },
 
   addChild: async (childData) => {
@@ -537,7 +539,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loadChildren: async () => {
     const { family } = get()
-    if (!family) return
+    if (!family) {
+      console.log('loadChildren: 没有家庭信息，跳过加载儿童')
+      return
+    }
+    
+    console.log('loadChildren: 开始加载儿童数据，family_id:', family.id)
     
     const { data, error } = await supabase
       .from('children')
@@ -549,6 +556,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return
     }
     
+    console.log('loadChildren: 加载到的儿童数据:', data)
     set({ children: data || [] })
   },
 

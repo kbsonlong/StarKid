@@ -10,6 +10,7 @@ import { Reports } from '../pages/Reports'
 import Settings from '../pages/Settings'
 import Community from '../pages/Community'
 import Collaborate from '../pages/Collaborate'
+import Debug from '../pages/Debug'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -60,6 +61,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: <Settings />
+      },
+      {
+        path: 'debug',
+        element: <Debug />
       }
     ]
   },
