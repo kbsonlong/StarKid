@@ -679,7 +679,7 @@ export function Community() {
                       
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                          {entry.name.charAt(0)}
+                          {entry.name?.charAt(0) || '?'}
                         </div>
                         <div>
                           <div className="font-semibold text-gray-800">

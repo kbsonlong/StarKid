@@ -364,7 +364,7 @@ export function Behaviors() {
                         </h3>
                         {behavior.rules?.category && (
                           <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                            {behavior.rules.category}
+                            {behavior.rules?.category}
                           </span>
                         )}
                       </div>

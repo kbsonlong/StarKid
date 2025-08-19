@@ -90,7 +90,7 @@ export function Reports() {
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0]
       const dayBehaviors = filteredBehaviors.filter(b => 
-        b.created_at.split('T')[0] === dateStr
+        b.created_at?.split('T')[0] === dateStr
       )
       
       const positive = dayBehaviors.filter(b => {

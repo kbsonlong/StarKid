@@ -546,8 +546,8 @@ const Collaborate: React.FC = () => {
                               }`}>
                                 {behavior.type === 'positive' ? '正面行为' : '负面行为'}
                               </span>
-                              <span className="text-sm text-gray-600">{behavior.child.name}</span>
-                              <span className="text-sm text-gray-500">记录者: {behavior.recorder.name}</span>
+                              <span className="text-sm text-gray-600">{behavior.child?.name || '未知孩子'}</span>
+                              <span className="text-sm text-gray-500">记录者: {behavior.recorder?.name || '未知记录者'}</span>
                             </div>
                             <p className="text-gray-800 mb-1">{behavior.description}</p>
                             <p className="text-sm text-gray-600">
@@ -588,7 +588,7 @@ const Collaborate: React.FC = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
-                              <span className="text-sm text-gray-600">{reward.child.name}</span>
+                              <span className="text-sm text-gray-600">{reward.child?.name || '未知孩子'}</span>
                               <span className="text-sm text-gray-500">
                                 申请时间: {new Date(reward.created_at).toLocaleString()}
                               </span>
