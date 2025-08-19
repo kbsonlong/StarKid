@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Trophy, MessageCircle, UserPlus, Star, Gift } from 'lucide-react';
+import { Users, Trophy, MessageCircle, UserPlus, Star, Gift, Send, Plus, Heart, Target } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -242,9 +242,26 @@ const Community: React.FC = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
         <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6 text-center">
-          <Users className="w-16 h-16 text-purple-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">选择小朋友</h2>
-          <p className="text-gray-600">请先在设置页面选择一个小朋友来使用互动社区功能</p>
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8">
+            <Users className="h-16 w-16 text-purple-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-800 mb-3">开始儿童社交之旅</h3>
+            <p className="text-gray-600 mb-6">
+              为了让孩子与其他小朋友互动，请先添加并选择一个小朋友。
+              孩子们可以通过邀请码成为好友，一起参与挑战！
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.href = '/settings'}
+                className="w-full inline-flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+              >
+                <UserPlus className="h-5 w-5 mr-2" />
+                前往添加小朋友
+              </button>
+              <p className="text-sm text-gray-500">
+                💡 添加小朋友后，他们将获得专属邀请码用于交友
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -317,25 +334,39 @@ const Community: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-lg p-6">
           {activeTab === 'friends' && (
             <div>
-              {/* 添加好友 */}
-              <div className="mb-6 p-4 bg-purple-50 rounded-lg">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">添加新好友</h3>
-                <div className="flex space-x-3">
-                  <input
-                    type="text"
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    placeholder="输入好友邀请码"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                  <button
-                    onClick={sendFriendInvite}
-                    disabled={loading}
-                    className="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>添加</span>
-                  </button>
+              {/* 添加好友 - 优化版 */}
+              <div className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0">
+                    <UserPlus className="h-8 w-8 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-green-900 mb-2">添加新好友</h3>
+                    <p className="text-green-700 mb-4">
+                      输入其他小朋友的邀请码，让 {selectedChild.name} 和他们成为好朋友！
+                      好朋友可以一起参与挑战，互相鼓励成长。
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <input
+                        type="text"
+                        value={inviteCode}
+                        onChange={(e) => setInviteCode(e.target.value)}
+                        placeholder="请输入好友的邀请码（例如：ABC123）"
+                        className="flex-1 px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white"
+                      />
+                      <button
+                        onClick={sendFriendInvite}
+                        disabled={loading}
+                        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 font-medium inline-flex items-center justify-center"
+                      >
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        发送好友请求
+                      </button>
+                    </div>
+                    <p className="text-sm text-green-600 mt-2">
+                      💡 提示：邀请码可以在小朋友的个人信息中找到
+                    </p>
+                  </div>
                 </div>
               </div>
 

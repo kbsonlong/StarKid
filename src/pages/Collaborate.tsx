@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff } from 'lucide-react';
+import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff, CheckCircle, XCircle, RefreshCw, Trash2, Share2, Clock } from 'lucide-react';
 import { useAuthStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -305,6 +305,34 @@ const Collaborate: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">成员数: {familyMembers.length}</span>
+            </div>
+          </div>
+
+          {/* 邀请家长提示卡片 */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 mb-4">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <UserPlus className="h-8 w-8 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">邀请更多家长参与</h3>
+                <p className="text-blue-700 mb-4">
+                  邀请配偶、祖父母或其他照顾者加入家庭，共同记录和管理孩子的行为表现。
+                  多人协作让孩子的成长记录更完整！
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setShowInviteCode(!showInviteCode)}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    {showInviteCode ? '隐藏邀请码' : '生成邀请码'}
+                  </button>
+                  <div className="text-sm text-blue-600">
+                    <span className="font-medium">提示：</span> 其他家长使用邀请码即可加入您的家庭
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

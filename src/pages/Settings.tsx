@@ -503,40 +503,74 @@ function Settings() {
                     </div>
                   ) : (
                     children.map(child => (
-                      <div key={child.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                            {child.avatar_url ? (
-                              <img 
-                                src={child.avatar_url} 
-                                alt={child.name} 
-                                className="w-12 h-12 rounded-full object-cover"
-                              />
-                            ) : (
-                              <Baby className="h-6 w-6 text-yellow-600" />
-                            )}
+                      <div key={child.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        {/* 儿童基本信息 */}
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                              {child.avatar_url ? (
+                                <img 
+                                  src={child.avatar_url} 
+                                  alt={child.name} 
+                                  className="w-12 h-12 rounded-full object-cover"
+                                />
+                              ) : (
+                                <Baby className="h-6 w-6 text-yellow-600" />
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-800">{child.name}</h4>
+                              <p className="text-sm text-gray-600">
+                                {calculateAge(child.birth_date)} 岁 · 总积分: {child.total_points}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-medium text-gray-800">{child.name}</h4>
-                            <p className="text-sm text-gray-600">
-                              {calculateAge(child.birth_date)} 岁 · 总积分: {child.total_points}
-                            </p>
+                          
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleChildEdit(child)}
+                              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleChildDelete(child)}
+                              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
                         
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleChildEdit(child)}
-                            className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleChildDelete(child)}
-                            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                        {/* 儿童邀请码区域 */}
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-t border-gray-200 p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h5 className="text-sm font-medium text-purple-900 mb-1">社交邀请码</h5>
+                              <p className="text-xs text-purple-700">
+                                其他小朋友可以使用此邀请码添加 {child.name} 为好友
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="bg-white px-3 py-2 rounded-lg border border-purple-200">
+                                <code className="text-sm font-mono text-purple-800">
+                                  {child.child_invite_code || '生成中...'}
+                                </code>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (child.child_invite_code) {
+                                    navigator.clipboard.writeText(child.child_invite_code)
+                                    // 这里可以添加复制成功的提示
+                                  }
+                                }}
+                                className="p-2 text-purple-600 hover:text-purple-800 transition-colors"
+                                title="复制邀请码"
+                              >
+                                <UserPlus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))
