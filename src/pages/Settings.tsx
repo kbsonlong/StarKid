@@ -20,6 +20,7 @@ import { useAuthStore } from '../store'
 import { Child } from '../lib/supabase'
 import { calculateAge, formatDate } from '../lib/utils'
 import { toast } from 'sonner'
+import { supabase } from '../lib/supabase'
 
 interface ChildFormData {
   name: string
@@ -468,10 +469,81 @@ function Settings() {
                             <button
                               type="submit"
                               disabled={submitting || !inviteCode.trim()}
-                              className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                              className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50 mb-2"
                             >
                               <UserPlus className="h-4 w-4 mr-2" />
                               {submitting ? '加入中...' : '加入家庭'}
+                            </button>
+                            
+                            {/* 临时调试按钮 */}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const { data: allFamilies, error } = await supabase
+                                    .from('families')
+                                    .select('id, name, invite_code, created_at')
+                                  
+                                  console.log('=== 调试：所有家庭数据 ===')
+                                  console.log('查询结果:', allFamilies)
+                                  console.log('查询错误:', error)
+                                  
+                                  if (allFamilies) {
+                                    allFamilies.forEach((family, index) => {
+                                      console.log(`家庭 ${index + 1}:`, {
+                                        id: family.id,
+                                        name: family.name,
+                                        invite_code: family.invite_code,
+                                        invite_code_length: family.invite_code?.length,
+                                        created_at: family.created_at
+                                      })
+                                    })
+                                  }
+                                  
+                                  alert(`找到 ${allFamilies?.length || 0} 个家庭，详情请查看控制台`)
+                                } catch (error) {
+                                  console.error('调试查询失败:', error)
+                                  alert('调试查询失败，请查看控制台')
+                                }
+                              }}
+                              className="inline-flex items-center px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs"
+                            >
+                              🔍 调试：查看所有家庭邀请码
+                            </button>
+                            
+                            <button
+                              type="button"
+                              className="inline-flex items-center px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-xs"
+                              onClick={async () => {
+                                console.log('=== 认证状态诊断 ===')
+                                
+                                // 检查Supabase session
+                                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                                console.log('Supabase Session:', session)
+                                console.log('Session Error:', sessionError)
+                                console.log('Access Token存在:', !!session?.access_token)
+                                console.log('User ID:', session?.user?.id)
+                                
+                                // 检查store状态
+                                console.log('Store中的用户:', user)
+                                console.log('Store中的家庭:', family)
+                                
+                                // 尝试简单查询测试权限
+                                try {
+                                  const { data: testData, error: testError } = await supabase
+                                    .from('users')
+                                    .select('id, email')
+                                    .limit(1)
+                                  
+                                  console.log('权限测试查询结果:', testData)
+                                  console.log('权限测试查询错误:', testError)
+                                } catch (err) {
+                                  console.error('权限测试失败:', err)
+                                }
+                                
+                                alert('认证状态诊断完成，请查看控制台输出')
+                              }}
+                            >
+                              🔍 检查认证状态
                             </button>
                           </div>
                         </form>

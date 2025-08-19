@@ -193,6 +193,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       })
       if (error) throw error
       
+      console.log('=== 登录成功，Supabase认证数据 ===')
+      console.log('Auth data:', data)
+      console.log('Session:', data.session)
+      console.log('User:', data.user)
+      
+      // 等待一下确保认证状态已设置
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       // 获取用户信息
       const { data: userData, error: userError } = await supabase
         .from('users')
@@ -200,8 +208,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .eq('email', email)
         .single()
       
-      if (userError) throw userError
+      if (userError) {
+        console.error('获取用户信息失败:', userError)
+        throw userError
+      }
       
+      console.log('获取到的用户数据:', userData)
       set({ user: userData })
       
       // 通过creator_id获取家庭信息
@@ -212,6 +224,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single()
       
       if (familyData) {
+        console.log('获取到的家庭数据:', familyData)
         set({ family: familyData })
         await get().loadChildren()
       }
@@ -266,49 +279,79 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   
   checkAuth: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user) {
-      // 获取用户信息
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (userData) {
-        let familyData = null
-        
-        // 首先通过creator_id查找用户创建的家庭
-        const { data: createdFamily } = await supabase
-          .from('families')
+      console.log('=== checkAuth 认证状态检查 ===')
+      console.log('Session:', session)
+      console.log('Session error:', sessionError)
+      console.log('User from session:', session?.user)
+      
+      if (sessionError) {
+        console.error('获取session失败:', sessionError)
+        return
+      }
+      
+      if (session?.user) {
+        // 获取用户信息
+        const { data: userData, error: userError } = await supabase
+          .from('users')
           .select('*')
-          .eq('creator_id', userData.id)
+          .eq('id', session.user.id)
           .single()
         
-        if (createdFamily) {
-          familyData = createdFamily
-        } else {
-          // 如果没有创建的家庭，通过family_members表查找用户所属的家庭
-          const { data: memberData } = await supabase
-            .from('family_members')
-            .select(`
-              family:families(*)
-            `)
-            .eq('user_id', userData.id)
+        console.log('用户数据查询结果:', { userData, userError })
+        
+        if (userError) {
+          console.error('获取用户信息失败:', userError)
+          return
+        }
+        
+        if (userData) {
+          let familyData = null
+          
+          // 首先通过creator_id查找用户创建的家庭
+          const { data: createdFamily, error: familyError } = await supabase
+            .from('families')
+            .select('*')
+            .eq('creator_id', userData.id)
             .single()
           
-          if (memberData?.family) {
-            familyData = memberData.family
+          console.log('创建的家庭查询结果:', { createdFamily, familyError })
+          
+          if (createdFamily) {
+            familyData = createdFamily
+          } else {
+            // 如果没有创建的家庭，通过family_members表查找用户所属的家庭
+            const { data: memberData, error: memberError } = await supabase
+              .from('family_members')
+              .select(`
+                family:families(*)
+              `)
+              .eq('user_id', userData.id)
+              .single()
+            
+            console.log('家庭成员查询结果:', { memberData, memberError })
+            
+            if (memberData?.family) {
+              familyData = memberData.family
+            }
+          }
+          
+          console.log('最终设置的数据:', { user: userData, family: familyData })
+          set({ user: userData, family: familyData })
+          
+          // 如果有家庭，加载儿童信息
+          if (familyData) {
+            await get().loadChildren()
           }
         }
-        
-        set({ user: userData, family: familyData })
-        
-        // 如果有家庭，加载儿童信息
-        if (familyData) {
-          await get().loadChildren()
-        }
+      } else {
+        console.log('没有有效的session，清除用户状态')
+        set({ user: null, family: null })
       }
+    } catch (error) {
+      console.error('checkAuth 执行失败:', error)
     }
   },
   
@@ -375,23 +418,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get()
     if (!user) throw new Error('User not authenticated')
     
-    console.log('Attempting to join family with invite code:', inviteCode)
+    // 检查用户认证状态
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('获取会话失败:', sessionError)
+      throw new Error('认证状态检查失败，请重新登录')
+    }
+    
+    if (!session?.user) {
+      throw new Error('用户未登录，请先登录后再加入家庭')
+    }
     
     // 查找家庭
     const { data: familyData, error: familyError } = await supabase
       .from('families')
       .select('*')
-      .eq('invite_code', inviteCode)
+      .eq('invite_code', inviteCode.trim())
       .single()
     
-    console.log('Family query result:', { familyData, familyError })
-    
     if (familyError) {
-      console.error('Family query error:', familyError)
       if (familyError.code === 'PGRST116') {
         throw new Error('邀请码无效或已过期')
       }
-      throw new Error(`数据库查询失败: ${familyError.message}`)
+      throw new Error(`查询家庭失败: ${familyError.message}`)
     }
     
     if (!familyData) {
