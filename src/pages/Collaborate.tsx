@@ -8,7 +8,7 @@ interface FamilyMember {
   id: string;
   family_id: string;
   user_id: string;
-  role: 'admin' | 'parent' | 'viewer';
+  role: 'parent' | 'guardian' | 'member';
   permissions: string[];
   joined_at: string;
   user: {
@@ -170,7 +170,7 @@ const Collaborate: React.FC = () => {
     }
   };
 
-  const updateMemberRole = async (memberId: string, newRole: 'admin' | 'parent' | 'viewer') => {
+  const updateMemberRole = async (memberId: string, newRole: 'parent' | 'guardian' | 'member') => {
     setLoading(true);
     try {
       const { error } = await supabase
@@ -261,18 +261,18 @@ const Collaborate: React.FC = () => {
 
   const getRoleDisplayName = (role: string) => {
     switch (role) {
-      case 'admin': return '管理员';
       case 'parent': return '家长';
-      case 'viewer': return '观察者';
+      case 'guardian': return '监护人';
+      case 'member': return '成员';
       default: return role;
     }
   };
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800';
       case 'parent': return 'bg-blue-100 text-blue-800';
-      case 'viewer': return 'bg-gray-100 text-gray-800';
+      case 'guardian': return 'bg-green-100 text-green-800';
+      case 'member': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -290,8 +290,8 @@ const Collaborate: React.FC = () => {
   }
 
   const currentUserMember = familyMembers.find(m => m.user_id === user?.id);
-  const isAdmin = currentUserMember?.role === 'admin';
-  const canManageMembers = isAdmin || currentUserMember?.role === 'parent';
+  const isAdmin = currentUserMember?.role === 'parent';
+  const canManageMembers = isAdmin || currentUserMember?.role === 'guardian';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
@@ -440,7 +440,7 @@ const Collaborate: React.FC = () => {
                       <div>
                         <div className="flex items-center space-x-2">
                           <h4 className="font-medium text-gray-800">{member.user.name}</h4>
-                          {member.role === 'admin' && <Crown className="w-4 h-4 text-yellow-500" />}
+                          {member.role === 'parent' && <Crown className="w-4 h-4 text-yellow-500" />}
                         </div>
                         <p className="text-sm text-gray-600">{member.user.email}</p>
                         <div className="flex items-center space-x-2 mt-1">
@@ -461,9 +461,9 @@ const Collaborate: React.FC = () => {
                           onChange={(e) => updateMemberRole(member.id, e.target.value as any)}
                           className="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="viewer">观察者</option>
-                          <option value="parent">家长</option>
-                          {isAdmin && <option value="admin">管理员</option>}
+                          <option value="member">成员</option>
+                          <option value="guardian">监护人</option>
+                          {isAdmin && <option value="parent">家长</option>}
                         </select>
                         <button
                           onClick={() => removeMember(member.id)}
@@ -486,7 +486,7 @@ const Collaborate: React.FC = () => {
                 <div className="p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
                     <Crown className="w-5 h-5 text-yellow-500" />
-                    <h4 className="font-medium text-gray-800">管理员</h4>
+                    <h4 className="font-medium text-gray-800">家长</h4>
                   </div>
                   <ul className="text-sm text-gray-600 space-y-1 ml-7">
                     <li>• 管理家庭成员和权限</li>
@@ -499,8 +499,8 @@ const Collaborate: React.FC = () => {
                 
                 <div className="p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Users className="w-5 h-5 text-blue-500" />
-                    <h4 className="font-medium text-gray-800">家长</h4>
+                    <Users className="w-5 h-5 text-green-500" />
+                    <h4 className="font-medium text-gray-800">监护人</h4>
                   </div>
                   <ul className="text-sm text-gray-600 space-y-1 ml-7">
                     <li>• 记录孩子的行为表现</li>
@@ -514,7 +514,7 @@ const Collaborate: React.FC = () => {
                 <div className="p-4 border border-gray-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
                     <Eye className="w-5 h-5 text-gray-500" />
-                    <h4 className="font-medium text-gray-800">观察者</h4>
+                    <h4 className="font-medium text-gray-800">成员</h4>
                   </div>
                   <ul className="text-sm text-gray-600 space-y-1 ml-7">
                     <li>• 查看孩子的基本信息</li>
