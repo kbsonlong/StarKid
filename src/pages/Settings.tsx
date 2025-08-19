@@ -19,6 +19,7 @@ import {
 import { useAuthStore } from '../store'
 import { Child } from '../lib/supabase'
 import { calculateAge, formatDate } from '../lib/utils'
+import { toast } from 'sonner'
 
 interface ChildFormData {
   name: string
@@ -131,14 +132,34 @@ function Settings() {
     e.preventDefault()
     if (!inviteCode.trim()) return
     
+    // 验证邀请码格式
+    const trimmedCode = inviteCode.trim().toUpperCase()
+    if (trimmedCode.length !== 6 || !/^[A-Z0-9]{6}$/.test(trimmedCode)) {
+      setJoinError('邀请码格式不正确，请输入6位字母数字组合')
+      return
+    }
+    
     setSubmitting(true)
     setJoinError('')
     try {
-      await joinFamily(inviteCode.trim())
+      await joinFamily(trimmedCode)
       setShowJoinFamily(false)
       setInviteCode('')
+      // 显示成功提示
+      toast.success('成功加入家庭！')
     } catch (error: any) {
-      setJoinError(error.message || '加入家庭失败，请检查邀请码是否正确')
+      console.error('Join family error:', error)
+      
+      // 根据错误类型提供更详细的提示
+      if (error.message?.includes('邀请码无效或已过期')) {
+        setJoinError('邀请码不存在或已过期，请向家庭管理员确认邀请码是否正确')
+      } else if (error.message?.includes('已经是该家庭的成员')) {
+        setJoinError('您已经是该家庭的成员了')
+      } else if (error.message?.includes('网络')) {
+        setJoinError('网络连接失败，请检查网络后重试')
+      } else {
+        setJoinError(error.message || '加入家庭失败，请稍后重试或联系技术支持')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -427,11 +448,14 @@ function Settings() {
                               type="text"
                               value={inviteCode}
                               onChange={(e) => {
-                                setInviteCode(e.target.value)
+                                const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                                setInviteCode(value)
                                 setJoinError('')
                               }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                              placeholder="请输入6位邀请码"
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent ${
+                                joinError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                              }`}
+                              placeholder="请输入6位邀请码（如：ABC123）"
                               maxLength={6}
                               required
                             />
@@ -452,10 +476,36 @@ function Settings() {
                           </div>
                         </form>
                         
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-800">
-                            <strong>提示：</strong>请向家庭管理员索取6位邀请码，邀请码可在协作页面找到。
-                          </p>
+                        <div className="mt-4 space-y-3">
+                          <div className="p-3 bg-blue-50 rounded-lg">
+                            <p className="text-sm text-blue-800">
+                              <strong>如何获取邀请码：</strong>
+                            </p>
+                            <ul className="text-sm text-blue-700 mt-1 space-y-1">
+                              <li>• 请联系已创建家庭的家长获取邀请码</li>
+                              <li>• 家长可在"协作"页面查看和复制邀请码</li>
+                              <li>• 邀请码为6位字母数字组合（如：ABC123）</li>
+                              <li>• 如果没有人创建家庭，请选择"创建新家庭"</li>
+                            </ul>
+                            <div className="mt-3 p-3 bg-blue-100 border border-blue-300 rounded-lg">
+                              <p className="text-blue-800 text-sm font-medium">💡 提示</p>
+                              <p className="text-blue-700 text-sm mt-1">
+                                如果您是第一个使用此应用的用户，请选择"创建新家庭"来开始。
+                                创建家庭后，您可以在协作页面找到邀请码分享给其他家长。
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="p-3 bg-amber-50 rounded-lg">
+                            <p className="text-sm text-amber-800">
+                              <strong>注意事项：</strong>
+                            </p>
+                            <ul className="text-sm text-amber-700 mt-1 space-y-1">
+                              <li>• 每个邀请码只能使用一次</li>
+                              <li>• 请确保邀请码输入正确，区分大小写</li>
+                              <li>• 如遇问题请联系家庭管理员重新生成邀请码</li>
+                            </ul>
+                          </div>
                         </div>
                       </div>
                     )}

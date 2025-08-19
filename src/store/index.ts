@@ -375,6 +375,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get()
     if (!user) throw new Error('User not authenticated')
     
+    console.log('Attempting to join family with invite code:', inviteCode)
+    
     // 查找家庭
     const { data: familyData, error: familyError } = await supabase
       .from('families')
@@ -382,20 +384,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .eq('invite_code', inviteCode)
       .single()
     
+    console.log('Family query result:', { familyData, familyError })
+    
     if (familyError) {
+      console.error('Family query error:', familyError)
       if (familyError.code === 'PGRST116') {
         throw new Error('邀请码无效或已过期')
       }
-      throw familyError
+      throw new Error(`数据库查询失败: ${familyError.message}`)
+    }
+    
+    if (!familyData) {
+      throw new Error('邀请码无效或已过期')
     }
     
     // 检查用户是否已经是家庭成员
-    const { data: existingMember } = await supabase
+    const { data: existingMember, error: memberCheckError } = await supabase
       .from('family_members')
       .select('*')
       .eq('family_id', familyData.id)
       .eq('user_id', user.id)
       .single()
+    
+    console.log('Member check result:', { existingMember, memberCheckError })
+    
+    // 如果查询出错但不是因为没有找到记录，则抛出错误
+    if (memberCheckError && memberCheckError.code !== 'PGRST116') {
+      console.error('Member check error:', memberCheckError)
+      throw new Error(`检查成员状态失败: ${memberCheckError.message}`)
+    }
     
     if (existingMember) {
       throw new Error('您已经是该家庭的成员')
@@ -411,8 +428,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         permissions: ['view_children', 'manage_behaviors', 'manage_rewards']
       })
     
-    if (memberError) throw memberError
+    if (memberError) {
+      console.error('Member insert error:', memberError)
+      throw new Error(`加入家庭失败: ${memberError.message}`)
+    }
     
+    console.log('Successfully joined family:', familyData.name)
     set({ family: familyData })
     await get().loadChildren()
   },
