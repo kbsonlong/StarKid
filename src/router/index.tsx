@@ -8,6 +8,8 @@ import { Behaviors } from '../pages/Behaviors'
 import { Rewards } from '../pages/Rewards'
 import { Reports } from '../pages/Reports'
 import Settings from '../pages/Settings'
+import Community from '../pages/Community'
+import Collaborate from '../pages/Collaborate'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -46,6 +48,14 @@ export const router = createBrowserRouter([
       {
         path: 'reports',
         element: <Reports />
+      },
+      {
+        path: 'community',
+        element: <Community />
+      },
+      {
+        path: 'collaborate',
+        element: <Collaborate />
       },
       {
         path: 'settings',

@@ -5,6 +5,8 @@ import {
   Activity, 
   Gift, 
   BarChart3,
+  Users,
+  UserPlus,
   Settings
 } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -34,6 +36,16 @@ const navigationItems = [
     name: '统计报告',
     href: '/reports',
     icon: BarChart3
+  },
+  {
+    name: '互动社区',
+    href: '/community',
+    icon: Users
+  },
+  {
+    name: '家长协作',
+    href: '/collaborate',
+    icon: UserPlus
   },
   {
     name: '设置',

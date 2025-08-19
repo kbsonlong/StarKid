@@ -28,6 +28,7 @@ export interface Family {
   description?: string
   invite_code: string
   created_at: string
+  children?: Child[]
 }
 
 export interface Child {
@@ -37,6 +38,8 @@ export interface Child {
   birth_date: string
   avatar_url?: string
   total_points: number
+  points: number
+  child_invite_code?: string
   created_at: string
 }
 
