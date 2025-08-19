@@ -65,7 +65,12 @@ const Collaborate: React.FC = () => {
     if (family) {
       loadFamilyMembers();
       loadPendingApprovals();
-      setInviteCode(family.invite_code || '');
+      // 如果家庭没有邀请码，自动生成一个
+      if (!family.invite_code) {
+        generateNewInviteCode();
+      } else {
+        setInviteCode(family.invite_code);
+      }
     }
   }, [family]);
 

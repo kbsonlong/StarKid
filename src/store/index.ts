@@ -276,12 +276,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .single()
       
       if (userData) {
-        // 通过creator_id查找用户创建的家庭
-        const { data: familyData } = await supabase
+        let familyData = null
+        
+        // 首先通过creator_id查找用户创建的家庭
+        const { data: createdFamily } = await supabase
           .from('families')
           .select('*')
           .eq('creator_id', userData.id)
           .single()
+        
+        if (createdFamily) {
+          familyData = createdFamily
+        } else {
+          // 如果没有创建的家庭，通过family_members表查找用户所属的家庭
+          const { data: memberData } = await supabase
+            .from('family_members')
+            .select(`
+              family:families(*)
+            `)
+            .eq('user_id', userData.id)
+            .single()
+          
+          if (memberData?.family) {
+            familyData = memberData.family
+          }
+        }
         
         set({ user: userData, family: familyData })
         
@@ -353,14 +372,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   joinFamily: async (inviteCode: string) => {
-    const { data, error } = await supabase
+    const { user } = get()
+    if (!user) throw new Error('User not authenticated')
+    
+    // 查找家庭
+    const { data: familyData, error: familyError } = await supabase
       .from('families')
       .select('*')
       .eq('invite_code', inviteCode)
       .single()
     
-    if (error) throw error
-    set({ family: data })
+    if (familyError) {
+      if (familyError.code === 'PGRST116') {
+        throw new Error('邀请码无效或已过期')
+      }
+      throw familyError
+    }
+    
+    // 检查用户是否已经是家庭成员
+    const { data: existingMember } = await supabase
+      .from('family_members')
+      .select('*')
+      .eq('family_id', familyData.id)
+      .eq('user_id', user.id)
+      .single()
+    
+    if (existingMember) {
+      throw new Error('您已经是该家庭的成员')
+    }
+    
+    // 将用户添加到家庭成员表
+    const { error: memberError } = await supabase
+      .from('family_members')
+      .insert({
+        family_id: familyData.id,
+        user_id: user.id,
+        role: 'parent',
+        permissions: ['view_children', 'manage_behaviors', 'manage_rewards']
+      })
+    
+    if (memberError) throw memberError
+    
+    set({ family: familyData })
     await get().loadChildren()
   },
 

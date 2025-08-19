@@ -44,7 +44,7 @@ interface FamilyData {
 }
 
 function Settings() {
-  const { user, family, children, updateProfile, updateFamily, createFamily, addChild, updateChild, removeChild } = useAuthStore()
+  const { user, family, children, updateProfile, updateFamily, createFamily, joinFamily, addChild, updateChild, removeChild } = useAuthStore()
   
   const [activeTab, setActiveTab] = useState<'profile' | 'family' | 'children' | 'notifications' | 'privacy'>('profile')
   const [showChildForm, setShowChildForm] = useState(false)
@@ -62,6 +62,10 @@ function Settings() {
     name: family?.name || '',
     description: family?.description || ''
   })
+  
+  const [showJoinFamily, setShowJoinFamily] = useState(false)
+  const [inviteCode, setInviteCode] = useState('')
+  const [joinError, setJoinError] = useState('')
   
   const [notifications, setNotifications] = useState({
     email_notifications: true,
@@ -118,6 +122,23 @@ function Settings() {
       }
     } catch (error) {
       console.error('Failed to save family:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+  
+  const handleJoinFamily = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!inviteCode.trim()) return
+    
+    setSubmitting(true)
+    setJoinError('')
+    try {
+      await joinFamily(inviteCode.trim())
+      setShowJoinFamily(false)
+      setInviteCode('')
+    } catch (error: any) {
+      setJoinError(error.message || '加入家庭失败，请检查邀请码是否正确')
     } finally {
       setSubmitting(false)
     }
@@ -312,49 +333,132 @@ function Settings() {
                 {!family ? (
                   <div className="text-center py-8">
                     <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">还没有创建家庭</h3>
-                    <p className="text-gray-600 mb-6">创建家庭后，您可以添加儿童并管理他们的行为记录</p>
-                    <div>
-                      <form onSubmit={handleFamilySubmit} className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            家庭名称
-                          </label>
-                          <input
-                            type="text"
-                            value={familyData.name}
-                            onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                            placeholder="请输入家庭名称"
-                            required
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            家庭描述
-                          </label>
-                          <textarea
-                            value={familyData.description}
-                            onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                            rows={3}
-                            placeholder="描述一下您的家庭"
-                          />
-                        </div>
-                        
-                        <div className="flex justify-end">
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">还没有加入家庭</h3>
+                    <p className="text-gray-600 mb-6">您可以创建新家庭或通过邀请码加入现有家庭</p>
+                    
+                    {/* 选择操作 */}
+                    {!showJoinFamily ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md mx-auto">
                           <button
-                            type="submit"
-                            disabled={submitting}
-                            className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                            onClick={() => setShowJoinFamily(false)}
+                            className="p-4 border-2 border-yellow-500 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
                           >
-                            <Save className="h-4 w-4 mr-2" />
-                            {submitting ? '创建中...' : '创建家庭'}
+                            <Plus className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+                            <div className="text-sm font-medium text-gray-800">创建新家庭</div>
+                            <div className="text-xs text-gray-600 mt-1">成为家庭管理员</div>
+                          </button>
+                          
+                          <button
+                            onClick={() => setShowJoinFamily(true)}
+                            className="p-4 border-2 border-gray-300 rounded-lg hover:border-yellow-500 hover:bg-yellow-50 transition-colors"
+                          >
+                            <UserPlus className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <div className="text-sm font-medium text-gray-800">加入家庭</div>
+                            <div className="text-xs text-gray-600 mt-1">使用邀请码加入</div>
                           </button>
                         </div>
-                      </form>
-                    </div>
+                        
+                        {/* 创建家庭表单 */}
+                        <div className="mt-8">
+                          <form onSubmit={handleFamilySubmit} className="space-y-4 max-w-md mx-auto">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                家庭名称
+                              </label>
+                              <input
+                                type="text"
+                                value={familyData.name}
+                                onChange={(e) => setFamilyData({ ...familyData, name: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                                placeholder="请输入家庭名称"
+                                required
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                家庭描述
+                              </label>
+                              <textarea
+                                value={familyData.description}
+                                onChange={(e) => setFamilyData({ ...familyData, description: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                                rows={3}
+                                placeholder="描述一下您的家庭"
+                              />
+                            </div>
+                            
+                            <div className="flex justify-center">
+                              <button
+                                type="submit"
+                                disabled={submitting}
+                                className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                              >
+                                <Save className="h-4 w-4 mr-2" />
+                                {submitting ? '创建中...' : '创建家庭'}
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    ) : (
+                      /* 加入家庭表单 */
+                      <div className="max-w-md mx-auto">
+                        <div className="mb-4">
+                          <button
+                            onClick={() => {
+                              setShowJoinFamily(false)
+                              setJoinError('')
+                              setInviteCode('')
+                            }}
+                            className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                          >
+                            ← 返回选择
+                          </button>
+                        </div>
+                        
+                        <form onSubmit={handleJoinFamily} className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              家庭邀请码
+                            </label>
+                            <input
+                              type="text"
+                              value={inviteCode}
+                              onChange={(e) => {
+                                setInviteCode(e.target.value)
+                                setJoinError('')
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                              placeholder="请输入6位邀请码"
+                              maxLength={6}
+                              required
+                            />
+                            {joinError && (
+                              <p className="text-sm text-red-600 mt-1">{joinError}</p>
+                            )}
+                          </div>
+                          
+                          <div className="flex justify-center">
+                            <button
+                              type="submit"
+                              disabled={submitting || !inviteCode.trim()}
+                              className="inline-flex items-center px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                            >
+                              <UserPlus className="h-4 w-4 mr-2" />
+                              {submitting ? '加入中...' : '加入家庭'}
+                            </button>
+                          </div>
+                        </form>
+                        
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                          <p className="text-sm text-blue-800">
+                            <strong>提示：</strong>请向家庭管理员索取6位邀请码，邀请码可在协作页面找到。
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <form onSubmit={handleFamilySubmit} className="space-y-6">

@@ -51,7 +51,7 @@ interface ChatMessage {
 }
 
 const Community: React.FC = () => {
-  const {  selectedChild } = useAuthStore();
+  const { user, selectedChild } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'friends' | 'challenges' | 'chat'>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
