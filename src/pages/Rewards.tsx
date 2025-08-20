@@ -12,7 +12,7 @@ import {
   Coins
 } from 'lucide-react'
 import { useAuthStore, useRewardsStore } from '../store'
-import { Reward } from '../lib/supabase'
+import { Reward } from '../lib/api'
 import { getPointsColor, getPointsBgColor } from '../lib/utils'
 
 interface RewardFormData {

@@ -17,10 +17,10 @@ import {
   Baby
 } from 'lucide-react'
 import { useAuthStore } from '../store'
-import { Child } from '../lib/supabase'
+import { Child } from '../lib/api'
 import { calculateAge, formatDate } from '../lib/utils'
 import { toast } from 'sonner'
-import { supabase } from '../lib/supabase'
+import { apiClient } from '../lib/api'
 
 interface ChildFormData {
   name: string
@@ -481,13 +481,10 @@ function Settings() {
                             <button
                               onClick={async () => {
                                 try {
-                                  const { data: allFamilies, error } = await supabase
-                                    .from('families')
-                                    .select('id, name, invite_code, created_at')
+                                  const allFamilies = await apiClient.getFamilies()
                                   
                                   console.log('=== 调试：所有家庭数据 ===')
                                   console.log('查询结果:', allFamilies)
-                                  console.log('查询错误:', error)
                                   
                                   if (allFamilies) {
                                     allFamilies.forEach((family, index) => {
@@ -518,12 +515,10 @@ function Settings() {
                               onClick={async () => {
                                 console.log('=== 认证状态诊断 ===')
                                 
-                                // 检查Supabase session
-                                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-                                console.log('Supabase Session:', session)
-                                console.log('Session Error:', sessionError)
-                                console.log('Access Token存在:', !!session?.access_token)
-                                console.log('User ID:', session?.user?.id)
+                                // 检查用户认证状态
+                                console.log('当前用户:', user)
+                                console.log('用户ID:', user?.id)
+                                console.log('用户邮箱:', user?.email)
                                 
                                 // 检查store状态
                                 console.log('Store中的用户:', user)
@@ -531,13 +526,9 @@ function Settings() {
                                 
                                 // 尝试简单查询测试权限
                                 try {
-                                  const { data: testData, error: testError } = await supabase
-                                    .from('users')
-                                    .select('id, email')
-                                    .limit(1)
+                                  const testData = await apiClient.getProfile()
                                   
                                   console.log('权限测试查询结果:', testData)
-                                  console.log('权限测试查询错误:', testError)
                                 } catch (err) {
                                   console.error('权限测试失败:', err)
                                 }

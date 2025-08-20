@@ -1,41 +1,18 @@
-import { createClient } from '@supabase/supabase-js'
+// Cloudflare Workers API 配置文件
+// 这个文件现在用于配置 Cloudflare Workers API 连接
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+if (!apiBaseUrl) {
+  throw new Error('Missing API base URL environment variable')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: {
-      getItem: (key: string) => {
-        if (typeof window !== 'undefined') {
-          return window.localStorage.getItem(key)
-        }
-        return null
-      },
-      setItem: (key: string, value: string) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, value)
-        }
-      },
-      removeItem: (key: string) => {
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(key)
-        }
-      }
-    },
-    // 设置会话过期时间为24小时（86400秒）
-    // 提前60秒刷新token
-    // 自定义会话过期时间
-    flowType: 'pkce'
-  }
-})
+export const config = {
+  apiBaseUrl,
+  // 其他配置选项可以在这里添加
+  timeout: 30000, // 30秒超时
+  retryAttempts: 3,
+}
 
 // 数据库表类型定义
 export interface User {

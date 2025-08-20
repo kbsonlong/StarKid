@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase, User, Family, Child, Rule, Behavior, Reward } from '../lib/supabase'
+import { apiClient, auth, User, Family, Child, Rule, Behavior, Reward } from '../lib/api'
 
 // 新增类型定义
 interface FamilyMember {
@@ -8,7 +8,8 @@ interface FamilyMember {
   user_id: string
   role: 'parent' | 'guardian'
   permissions: string[]
-  joined_at: string
+  created_at: string
+  updated_at: string
   user?: {
     name: string
     email: string
@@ -89,7 +90,7 @@ interface AuthState {
   updateProfile: (updates: { name?: string; email?: string; avatar_url?: string }) => Promise<void>
   createFamily: (familyData: { name: string; description?: string }) => Promise<void>
   updateFamily: (updates: { name?: string; description?: string }) => Promise<void>
-  joinFamily: (inviteCode: string) => Promise<void>
+  joinFamily: (inviteCode: string) => Promise<{ family: Family }>
   addChild: (childData: { name: string; birth_date: string; avatar_url?: string }) => Promise<void>
   updateChild: (id: string, updates: { name?: string; birth_date?: string; avatar_url?: string }) => Promise<void>
   removeChild: (id: string) => Promise<void>
@@ -115,7 +116,7 @@ interface BehaviorsState {
   children: Child[]
   loading: boolean
   loadBehaviors: (familyId: string) => Promise<void>
-  addBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<void>
+  addBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<Behavior>
   createBehavior: (behaviorData: Omit<Behavior, 'id' | 'created_at'>) => Promise<Behavior>
   updateBehavior: (id: string, updates: Partial<Behavior>) => Promise<void>
   deleteBehavior: (id: string) => Promise<void>
@@ -208,46 +209,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true })
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
+      const authResponse = await apiClient.login(email, password)
       
-      console.log('=== 登录成功，Supabase认证数据 ===')
-      console.log('Auth data:', data)
-      console.log('Session:', data.session)
-      console.log('User:', data.user)
+      console.log('=== 登录成功，API认证数据 ===')
+      console.log('Auth response:', authResponse)
+      console.log('User:', authResponse.user)
       
-      // 等待一下确保认证状态已设置
-      await new Promise(resolve => setTimeout(resolve, 100))
+      set({ user: authResponse.user })
       
-      // 获取用户信息
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single()
-      
-      if (userError) {
-        console.error('获取用户信息失败:', userError)
-        throw userError
-      }
-      
-      console.log('获取到的用户数据:', userData)
-      set({ user: userData })
-      
-      // 通过creator_id获取家庭信息
-      const { data: familyData } = await supabase
-        .from('families')
-        .select('*')
-        .eq('creator_id', userData.id)
-        .single()
-      
-      if (familyData) {
-        console.log('获取到的家庭数据:', familyData)
-        set({ family: familyData })
-        await get().loadChildren()
+      // 获取用户的家庭信息
+      try {
+        const families = await apiClient.getFamilies()
+        if (families.length > 0) {
+          const family = families[0] // 假设用户只属于一个家庭
+          console.log('获取到的家庭数据:', family)
+          set({ family })
+          await get().loadChildren()
+        }
+      } catch (familyError) {
+        console.warn('获取家庭信息失败:', familyError)
+        // 不抛出错误，因为用户可能还没有家庭
       }
     } catch (error) {
       console.error('Login error:', error)
@@ -260,27 +241,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (email: string, password: string, name: string) => {
     set({ isLoading: true })
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
-      if (error) throw error
+      const authResponse = await apiClient.register(email, password, name)
       
-      // 创建用户记录
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: data.user?.id,
-          email,
-          name,
-          role: 'parent'
-        })
-        .select()
-        .single()
+      console.log('=== 注册成功，API认证数据 ===')
+      console.log('Auth response:', authResponse)
+      console.log('User:', authResponse.user)
       
-      if (userError) throw userError
-      
-      set({ user: userData })
+      set({ user: authResponse.user })
     } catch (error) {
       console.error('Register error:', error)
       throw error
@@ -290,89 +257,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await supabase.auth.signOut()
-    set({ user: null, family: null })
+    await apiClient.logout()
+    set({ user: null, family: null, children: [], selectedChild: null })
   },
   
   logout: async () => {
-    await supabase.auth.signOut()
-    set({ user: null, family: null })
+    await apiClient.logout()
+    set({ user: null, family: null, children: [], selectedChild: null })
   },
   
   checkAuth: async () => {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
       console.log('=== checkAuth 认证状态检查 ===')
-      console.log('Session:', session)
-      console.log('Session error:', sessionError)
-      console.log('User from session:', session?.user)
       
-      if (sessionError) {
-        console.error('获取session失败:', sessionError)
+      // 检查是否有有效的 token
+      if (!auth.isAuthenticated()) {
+        console.log('没有有效的token，清除用户状态')
+        set({ user: null, family: null, children: [], selectedChild: null })
         return
       }
       
-      if (session?.user) {
-        // 获取用户信息
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
+      // 获取当前用户信息
+      const userData = await apiClient.getMe()
+      console.log('用户数据查询结果:', userData)
+      
+      if (userData) {
+        // 获取用户的家庭信息
+        const families = await apiClient.getFamilies()
+        const familyData = families.length > 0 ? families[0] : null
         
-        console.log('用户数据查询结果:', { userData, userError })
+        console.log('最终设置的数据:', { user: userData, family: familyData })
+        set({ user: userData, family: familyData })
         
-        if (userError) {
-          console.error('获取用户信息失败:', userError)
-          return
+        // 如果有家庭，加载儿童信息
+        if (familyData) {
+          await get().loadChildren()
         }
-        
-        if (userData) {
-          let familyData = null
-          
-          // 首先通过creator_id查找用户创建的家庭
-          const { data: createdFamily, error: familyError } = await supabase
-            .from('families')
-            .select('*')
-            .eq('creator_id', userData.id)
-            .single()
-          
-          console.log('创建的家庭查询结果:', { createdFamily, familyError })
-          
-          if (createdFamily) {
-            familyData = createdFamily
-          } else {
-            // 如果没有创建的家庭，通过family_members表查找用户所属的家庭
-            const { data: memberData, error: memberError } = await supabase
-              .from('family_members')
-              .select(`
-                family:families(*)
-              `)
-              .eq('user_id', userData.id)
-              .single()
-            
-            console.log('家庭成员查询结果:', { memberData, memberError })
-            
-            if (memberData?.family) {
-              familyData = memberData.family
-            }
-          }
-          
-          console.log('最终设置的数据:', { user: userData, family: familyData })
-          set({ user: userData, family: familyData })
-          
-          // 如果有家庭，加载儿童信息
-          if (familyData) {
-            await get().loadChildren()
-          }
-        }
-      } else {
-        console.log('没有有效的session，清除用户状态')
-        set({ user: null, family: null })
       }
     } catch (error) {
       console.error('checkAuth 执行失败:', error)
+      // 如果获取用户信息失败，可能是 token 过期，清除状态
+      set({ user: null, family: null, children: [], selectedChild: null })
+      auth.clearAuth()
     }
   },
   
@@ -381,88 +307,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await get().checkAuth()
       
-      // 清理之前的监听器（如果存在）
-      const currentListener = get().authListener
-      if (currentListener) {
-        currentListener.subscription.unsubscribe()
-      }
-      
-      // 添加认证状态监听器
-      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('=== 认证状态变化 ===', { event, session })
+      // 设置认证状态变化监听器
+      auth.onAuthStateChange((isAuthenticated) => {
+        console.log('=== 认证状态变化 ===', { isAuthenticated })
         
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // 用户登录或token刷新时，重新检查认证状态
-          await get().checkAuth()
-        } else if (event === 'SIGNED_OUT') {
+        if (isAuthenticated) {
+          // 用户登录时，重新检查认证状态
+          get().checkAuth()
+        } else {
           // 用户登出时，清除状态
           set({ user: null, family: null, children: [], selectedChild: null })
         }
       })
-      
-      // 保存监听器引用
-      set({ authListener })
     } finally {
       set({ isLoading: false })
     }
   },
 
   cleanup: () => {
-    const currentListener = get().authListener
-    if (currentListener) {
-      currentListener.subscription.unsubscribe()
-      set({ authListener: null })
-    }
+    // 清理认证状态监听器
+    auth.clearAuthStateListeners()
   },
 
   updateProfile: async (updates) => {
     const { user } = get()
     if (!user) throw new Error('No user logged in')
     
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', user.id)
-      .select()
-      .single()
-    
-    if (error) throw error
-    set({ user: data })
+    const updatedUser = await apiClient.updateProfile(updates)
+    set({ user: updatedUser })
   },
 
   updateFamily: async (updates) => {
     const { family } = get()
     if (!family) throw new Error('No family selected')
     
-    const { data, error } = await supabase
-      .from('families')
-      .update(updates)
-      .eq('id', family.id)
-      .select()
-      .single()
-    
-    if (error) throw error
-    set({ family: data })
+    const updatedFamily = await apiClient.updateFamily(family.id, updates)
+    set({ family: updatedFamily })
   },
 
   createFamily: async (familyData: { name: string; description?: string }) => {
     const { user } = get()
     if (!user) throw new Error('User not authenticated')
     
-    const inviteCode = generateInviteCode()
-    const { data, error } = await supabase
-      .from('families')
-      .insert({
-        creator_id: user.id,
-        name: familyData.name,
-        description: familyData.description,
-        invite_code: inviteCode
-      })
-      .select()
-      .single()
-    
-    if (error) throw error
-    set({ family: data })
+    const newFamily = await apiClient.createFamily(familyData)
+    set({ family: newFamily })
   },
 
   joinFamily: async (inviteCode: string) => {
@@ -471,124 +359,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     console.log('joinFamily: 开始申请加入家庭，邀请码:', inviteCode)
     
-    const { data: familyData, error: familyError } = await supabase
-      .from('families')
-      .select('*')
-      .eq('invite_code', inviteCode.trim())
-      .single()
+    const family = await apiClient.joinFamily(inviteCode.trim())
     
-    if (familyError) {
-      if (familyError.code === 'PGRST116') {
-        throw new Error('邀请码无效或已过期')
-      }
-      throw new Error(`查询家庭失败: ${familyError.message}`)
-    }
+    // 如果成功加入家庭，更新本地状态
+    set({ family })
+    // 重新加载儿童信息
+    await get().loadChildren()
     
-    if (!familyData) {
-      throw new Error('邀请码无效或已过期')
-    }
-    
-    // 检查用户是否已经是家庭成员
-    const { data: existingMember, error: memberCheckError } = await supabase
-      .from('family_members')
-      .select('*')
-      .eq('family_id', familyData.id)
-      .eq('user_id', user.id)
-      .single()
-    
-    console.log('Member check result:', { existingMember, memberCheckError })
-    
-    // 如果查询出错但不是因为没有找到记录，则抛出错误
-    if (memberCheckError && memberCheckError.code !== 'PGRST116') {
-      console.error('Member check error:', memberCheckError)
-      throw new Error(`检查成员状态失败: ${memberCheckError.message}`)
-    }
-    
-    if (existingMember) {
-      throw new Error('您已经是该家庭的成员')
-    }
-    
-    // 检查是否已有待审核的申请
-    const { data: existingRequest, error: requestCheckError } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('family_id', familyData.id)
-      .eq('user_id', user.id)
-      .eq('status', 'pending')
-      .single()
-    
-    if (requestCheckError && requestCheckError.code !== 'PGRST116') {
-      console.error('Request check error:', requestCheckError)
-      throw new Error(`检查申请状态失败: ${requestCheckError.message}`)
-    }
-    
-    if (existingRequest) {
-      throw new Error('您已提交过加入申请，请等待家庭管理员审核')
-    }
-    
-    // 创建加入申请
-    const { error: requestError } = await supabase
-      .from('join_requests')
-      .insert({
-        family_id: familyData.id,
-        user_id: user.id,
-        user_name: user.name || user.email,
-        user_email: user.email,
-        status: 'pending',
-        message: `申请加入家庭：${familyData.name}`
-      })
-    
-    if (requestError) {
-      console.error('Request insert error:', requestError)
-      throw new Error(`提交申请失败: ${requestError.message}`)
-    }
-    
-    console.log('Successfully submitted join request for family:', familyData.name)
-    throw new Error('申请已提交，请等待家庭管理员审核。审核通过后您将收到通知。')
+    return { family }
   },
 
   addChild: async (childData) => {
     const { family } = get()
     if (!family) throw new Error('No family selected')
     
-    const { data, error } = await supabase
-      .from('children')
-      .insert({
-        family_id: family.id,
-        name: childData.name,
-        birth_date: childData.birth_date,
-        avatar_url: childData.avatar_url
-      })
-      .select()
-      .single()
-    
-    if (error) throw error
+    const newChild = await apiClient.createChild({
+      name: childData.name,
+      birth_date: childData.birth_date,
+      avatar_url: childData.avatar_url
+    })
     
     const { children } = get()
-    set({ children: [...children, data] })
+    set({ children: [...children, newChild] })
   },
 
   updateChild: async (id: string, updates: { name?: string; birth_date?: string; avatar_url?: string }) => {
-    const { data, error } = await supabase
-      .from('children')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) throw error
+    const updatedChild = await apiClient.updateChild(id, updates)
     
     const { children } = get()
-    set({ children: children.map(child => child.id === id ? data : child) })
+    set({ children: children.map(child => child.id === id ? updatedChild : child) })
   },
 
   removeChild: async (id: string) => {
-    const { error } = await supabase
-      .from('children')
-      .delete()
-      .eq('id', id)
-    
-    if (error) throw error
+    await apiClient.deleteChild(id)
     
     const { children } = get()
     set({ children: children.filter(child => child.id !== id) })
@@ -603,18 +406,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     console.log('loadChildren: 开始加载儿童数据，family_id:', family.id)
     
-    const { data, error } = await supabase
-      .from('children')
-      .select('*')
-      .eq('family_id', family.id)
-    
-    if (error) {
+    try {
+      const children = await apiClient.getChildren(family.id)
+      console.log('loadChildren: 加载到的儿童数据:', children)
+      set({ children: children || [] })
+    } catch (error) {
       console.error('Load children error:', error)
-      return
+      set({ children: [] })
     }
-    
-    console.log('loadChildren: 加载到的儿童数据:', data)
-    set({ children: data || [] })
   },
 
   setSelectedChild: (child: Child | null) => {
@@ -626,14 +425,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!family) throw new Error('No family selected')
     
     const newInviteCode = generateInviteCode()
-    const { error } = await supabase
-      .from('families')
-      .update({ invite_code: newInviteCode })
-      .eq('id', family.id)
+    const updatedFamily = await apiClient.updateFamily(family.id, { invite_code: newInviteCode })
     
-    if (error) throw error
-    
-    set({ family: { ...family, invite_code: newInviteCode } })
+    set({ family: updatedFamily })
     return newInviteCode
   },
 
@@ -642,63 +436,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { family } = get()
     if (!family) throw new Error('No family selected')
     
-    const { data, error } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('family_id', family.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    return data || []
+    // 加入申请功能待后续实现
+    return []
   },
 
   // 审核加入申请
   approveJoinRequest: async (requestId: string, approved: boolean) => {
-    const { user } = get()
-    if (!user) throw new Error('User not authenticated')
-    
-    // 获取申请详情
-    const { data: request, error: requestError } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('id', requestId)
-      .single()
-    
-    if (requestError) throw new Error(`获取申请信息失败: ${requestError.message}`)
-    if (!request) throw new Error('申请不存在')
-    
-    if (approved) {
-      // 审核通过：将用户添加到家庭成员表
-      const { error: memberError } = await supabase
-        .from('family_members')
-        .insert({
-          family_id: request.family_id,
-          user_id: request.user_id,
-          role: 'parent',
-          permissions: ['view_children', 'manage_behaviors', 'manage_rewards']
-        })
-      
-      if (memberError) {
-        throw new Error(`添加家庭成员失败: ${memberError.message}`)
-      }
-    }
-    
-    // 更新申请状态
-    const { error: updateError } = await supabase
-      .from('join_requests')
-      .update({
-        status: approved ? 'approved' : 'rejected',
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId)
-    
-    if (updateError) {
-      throw new Error(`更新申请状态失败: ${updateError.message}`)
-    }
-    
-    return approved ? '申请已通过' : '申请已拒绝'
+    // 加入申请功能待后续实现
+    throw new Error('加入申请功能暂未实现')
   }
 }))
 
@@ -712,75 +457,39 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('rules')
-        .select('*')
-        .eq('family_id', family.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      set({ rules: data || [] })
+      const rules = await apiClient.getRules(family.id)
+      set({ rules: rules || [] })
     } catch (error) {
       console.error('Load rules error:', error)
+      set({ rules: [] })
     } finally {
       set({ loading: false })
     }
   },
 
   createRule: async (rule) => {
-    const { family } = useAuthStore.getState()
-    if (!family) throw new Error('No family selected')
-    
-    const { data, error } = await supabase
-      .from('rules')
-      .insert({ ...rule, family_id: family.id })
-      .select()
-      .single()
-    
-    if (error) throw error
+    const newRule = await apiClient.createRule(rule)
     
     const { rules } = get()
-    set({ rules: [data, ...rules] })
+    set({ rules: [newRule, ...rules] })
   },
 
   addRule: async (rule) => {
-    const { family } = useAuthStore.getState()
-    if (!family) throw new Error('No family selected')
-    
-    const { data, error } = await supabase
-      .from('rules')
-      .insert({ ...rule, family_id: family.id })
-      .select()
-      .single()
-    
-    if (error) throw error
+    const newRule = await apiClient.createRule(rule)
     
     const { rules } = get()
-    set({ rules: [data, ...rules] })
+    set({ rules: [newRule, ...rules] })
   },
 
   updateRule: async (id: string, updates: Partial<Rule>) => {
-    const { data, error } = await supabase
-      .from('rules')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) throw error
+    const updatedRule = await apiClient.updateRule(id, updates)
     
     const { rules } = get()
-    set({ rules: rules.map(rule => rule.id === id ? data : rule) })
+    set({ rules: rules.map(rule => rule.id === id ? updatedRule : rule) })
   },
 
   deleteRule: async (id: string) => {
-    const { error } = await supabase
-      .from('rules')
-      .delete()
-      .eq('id', id)
-    
-    if (error) throw error
+    await apiClient.deleteRule(id)
     
     const { rules } = get()
     set({ rules: rules.filter(rule => rule.id !== id) })
@@ -795,96 +504,48 @@ export const useBehaviorsStore = create<BehaviorsState>((set, get) => ({
   loadBehaviors: async (familyId: string) => {
     set({ loading: true })
     try {
-      const [behaviorsResponse, childrenResponse] = await Promise.all([
-        supabase
-          .from('behaviors')
-          .select(`
-            *,
-            children(name),
-            rules(name, type, category),
-            behavior_images(id, image_url, storage_path)
-          `)
-          .eq('family_id', familyId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('children')
-          .select('*')
-          .eq('family_id', familyId)
+      const [behaviors, children] = await Promise.all([
+        apiClient.getBehaviors(familyId),
+        apiClient.getChildren(familyId)
       ])
       
-      if (behaviorsResponse.error) throw behaviorsResponse.error
-      if (childrenResponse.error) throw childrenResponse.error
-      
       set({ 
-        behaviors: behaviorsResponse.data || [],
-        children: childrenResponse.data || []
+        behaviors: behaviors || [],
+        children: children || []
       })
     } catch (error) {
       console.error('Load behaviors error:', error)
+      set({ behaviors: [], children: [] })
     } finally {
       set({ loading: false })
     }
   },
 
   addBehavior: async (behaviorData) => {
-    const { data, error } = await supabase
-      .from('behaviors')
-      .insert(behaviorData)
-      .select(`
-        *,
-        children(name),
-        rules(name, type, category),
-        behavior_images(id, image_url, storage_path)
-      `)
-      .single()
-    
-    if (error) throw error
+    const newBehavior = await apiClient.createBehavior(behaviorData)
     
     const { behaviors } = get()
-    set({ behaviors: [data, ...behaviors] })
-    return data
+    set({ behaviors: [newBehavior, ...behaviors] })
+    return newBehavior
   },
 
   createBehavior: async (behaviorData) => {
-    const { data, error } = await supabase
-      .from('behaviors')
-      .insert(behaviorData)
-      .select(`
-        *,
-        children(name),
-        rules(name, type, category),
-        behavior_images(id, image_url, storage_path)
-      `)
-      .single()
-    
-    if (error) throw error
+    const newBehavior = await apiClient.createBehavior(behaviorData)
     
     const { behaviors } = get()
-    set({ behaviors: [data, ...behaviors] })
-    return data
+    set({ behaviors: [newBehavior, ...behaviors] })
+    return newBehavior
   },
 
   updateBehavior: async (id: string, updates: Partial<Behavior>) => {
-    const { data, error } = await supabase
-      .from('behaviors')
-      .update(updates)
-      .eq('id', id)
-      .select('*, children(name)')
-      .single()
-    
-    if (error) throw error
+    const updatedBehavior = await apiClient.updateBehavior(id, updates)
     
     const { behaviors } = get()
-    set({ behaviors: behaviors.map(behavior => behavior.id === id ? data : behavior) })
+    set({ behaviors: behaviors.map(behavior => behavior.id === id ? updatedBehavior : behavior) })
   },
 
   deleteBehavior: async (id: string) => {
-    const { error } = await supabase
-      .from('behaviors')
-      .delete()
-      .eq('id', id)
-    
-    if (error) throw error
+    await apiClient.deleteBehavior(id)
     
     const { behaviors } = get()
     set({ behaviors: behaviors.filter(behavior => behavior.id !== id) })
@@ -901,75 +562,39 @@ export const useRewardsStore = create<RewardsState>((set, get) => ({
     
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('rewards')
-        .select('*')
-        .eq('family_id', family.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      set({ rewards: data || [] })
+      const rewards = await apiClient.getRewards(family.id)
+      set({ rewards: rewards || [] })
     } catch (error) {
       console.error('Load rewards error:', error)
+      set({ rewards: [] })
     } finally {
       set({ loading: false })
     }
   },
 
   createReward: async (reward) => {
-    const { family } = useAuthStore.getState()
-    if (!family) throw new Error('No family selected')
-    
-    const { data, error } = await supabase
-      .from('rewards')
-      .insert({ ...reward, family_id: family.id })
-      .select()
-      .single()
-    
-    if (error) throw error
+    const newReward = await apiClient.createReward(reward)
     
     const { rewards } = get()
-    set({ rewards: [data, ...rewards] })
+    set({ rewards: [newReward, ...rewards] })
   },
 
   addReward: async (reward) => {
-    const { family } = useAuthStore.getState()
-    if (!family) throw new Error('No family selected')
-    
-    const { data, error } = await supabase
-      .from('rewards')
-      .insert({ ...reward, family_id: family.id })
-      .select()
-      .single()
-    
-    if (error) throw error
+    const newReward = await apiClient.createReward(reward)
     
     const { rewards } = get()
-    set({ rewards: [data, ...rewards] })
+    set({ rewards: [newReward, ...rewards] })
   },
 
   updateReward: async (id: string, updates: Partial<Reward>) => {
-    const { data, error } = await supabase
-      .from('rewards')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) throw error
+    const updatedReward = await apiClient.updateReward(id, updates)
     
     const { rewards } = get()
-    set({ rewards: rewards.map(reward => reward.id === id ? data : reward) })
+    set({ rewards: rewards.map(reward => reward.id === id ? updatedReward : reward) })
   },
 
   deleteReward: async (id: string) => {
-    const { error } = await supabase
-      .from('rewards')
-      .delete()
-      .eq('id', id)
-    
-    if (error) throw error
+    await apiClient.deleteReward(id)
     
     const { rewards } = get()
     set({ rewards: rewards.filter(reward => reward.id !== id) })
@@ -990,18 +615,11 @@ export const useFamilyMembersStore = create<FamilyMembersState>((set, get) => ({
   loadMembers: async (familyId: string) => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('family_members')
-        .select(`
-          *,
-          user:users(name, email, avatar_url)
-        `)
-        .eq('family_id', familyId)
-      
-      if (error) throw error
-      set({ members: data || [] })
+      const members = await apiClient.getFamilyMembers(familyId)
+      set({ members: members || [] })
     } catch (error) {
       console.error('Load members error:', error)
+      set({ members: [] })
     } finally {
       set({ loading: false })
     }
@@ -1011,60 +629,27 @@ export const useFamilyMembersStore = create<FamilyMembersState>((set, get) => ({
     const { family } = useAuthStore.getState()
     if (!family) throw new Error('No family selected')
     
-    // 查找用户
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single()
-    
-    if (userError) throw new Error('用户不存在')
-    
-    // 添加家庭成员
-    const { data, error } = await supabase
-      .from('family_members')
-      .insert({
-        family_id: family.id,
-        user_id: userData.id,
-        role,
-        permissions
-      })
-      .select(`
-        *,
-        user:users(name, email, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
+    const newMember = await apiClient.inviteFamilyMember(family.id, email, role, permissions)
     
     const { members } = get()
-    set({ members: [...members, data] })
+    set({ members: [...members, newMember] })
   },
 
   updateMemberRole: async (memberId: string, role: 'parent' | 'guardian', permissions: string[]) => {
-    const { data, error } = await supabase
-      .from('family_members')
-      .update({ role, permissions })
-      .eq('id', memberId)
-      .select(`
-        *,
-        user:users(name, email, avatar_url)
-      `)
-      .single()
+    const { family } = useAuthStore.getState()
+    if (!family) throw new Error('No family selected')
     
-    if (error) throw error
+    const updatedMember = await apiClient.updateFamilyMemberRole(family.id, memberId, role, permissions)
     
     const { members } = get()
-    set({ members: members.map(member => member.id === memberId ? data : member) })
+    set({ members: members.map(member => member.id === memberId ? updatedMember : member) })
   },
 
   removeMember: async (memberId: string) => {
-    const { error } = await supabase
-      .from('family_members')
-      .delete()
-      .eq('id', memberId)
+    const { family } = useAuthStore.getState()
+    if (!family) throw new Error('No family selected')
     
-    if (error) throw error
+    await apiClient.removeFamilyMember(family.id, memberId)
     
     const { members } = get()
     set({ members: members.filter(member => member.id !== memberId) })
@@ -1074,18 +659,12 @@ export const useFamilyMembersStore = create<FamilyMembersState>((set, get) => ({
     const { family } = useAuthStore.getState()
     if (!family) throw new Error('No family selected')
     
-    const newCode = generateInviteCode()
-    const { error } = await supabase
-      .from('families')
-      .update({ invite_code: newCode })
-      .eq('id', family.id)
-    
-    if (error) throw error
+    const result = await apiClient.generateFamilyInviteCode(family.id)
     
     // 更新本地family状态
-    useAuthStore.setState({ family: { ...family, invite_code: newCode } })
+    useAuthStore.setState({ family: { ...family, invite_code: result.invite_code } })
     
-    return newCode
+    return result.invite_code
   }
 }))
 
@@ -1098,34 +677,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   loadFriends: async (childId: string) => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('friendships')
-        .select(`
-          *,
-          requester:children!friendships_requester_id_fkey(name, avatar_url),
-          addressee:children!friendships_addressee_id_fkey(name, avatar_url)
-        `)
-        .or(`requester_id.eq.${childId},addressee_id.eq.${childId}`)
-        .eq('status', 'accepted')
-      
-      if (error) throw error
-      
-      // 获取待处理的好友请求
-      const { data: pendingData, error: pendingError } = await supabase
-        .from('friendships')
-        .select(`
-          *,
-          requester:children!friendships_requester_id_fkey(name, avatar_url),
-          addressee:children!friendships_addressee_id_fkey(name, avatar_url)
-        `)
-        .eq('addressee_id', childId)
-        .eq('status', 'pending')
-      
-      if (pendingError) throw pendingError
-      
+      // 暂时使用空数组，好友系统功能待后续实现
       set({ 
-        friends: data || [],
-        pendingRequests: pendingData || []
+        friends: [],
+        pendingRequests: []
       })
     } catch (error) {
       console.error('Load friends error:', error)
@@ -1135,84 +690,18 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   },
 
   sendFriendRequest: async (requesterId: string, addresseeCode: string) => {
-    // 通过邀请码查找目标儿童
-    const { data: childData, error: childError } = await supabase
-      .from('children')
-      .select('id')
-      .eq('child_invite_code', addresseeCode)
-      .single()
-    
-    if (childError) throw new Error('邀请码无效')
-    
-    // 检查是否已经是好友或已发送请求
-    const { data: existingFriendship } = await supabase
-      .from('friendships')
-      .select('id')
-      .or(`and(requester_id.eq.${requesterId},addressee_id.eq.${childData.id}),and(requester_id.eq.${childData.id},addressee_id.eq.${requesterId})`)
-      .single()
-    
-    if (existingFriendship) {
-      throw new Error('已经是好友或已发送好友请求')
-    }
-    
-    // 发送好友请求
-    const { data, error } = await supabase
-      .from('friendships')
-      .insert({
-        requester_id: requesterId,
-        addressee_id: childData.id,
-        status: 'pending'
-      })
-      .select(`
-        *,
-        requester:children!friendships_requester_id_fkey(name, avatar_url),
-        addressee:children!friendships_addressee_id_fkey(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
+    // 好友系统功能待后续实现
+    throw new Error('好友系统功能暂未实现')
   },
 
   respondToFriendRequest: async (requestId: string, response: 'accepted' | 'declined') => {
-    const { data, error } = await supabase
-      .from('friendships')
-      .update({ status: response })
-      .eq('id', requestId)
-      .select(`
-        *,
-        requester:children!friendships_requester_id_fkey(name, avatar_url),
-        addressee:children!friendships_addressee_id_fkey(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { friends, pendingRequests } = get()
-    
-    // 从待处理列表中移除
-    const updatedPending = pendingRequests.filter(req => req.id !== requestId)
-    
-    // 如果接受，添加到好友列表
-    if (response === 'accepted') {
-      set({ 
-        friends: [...friends, data],
-        pendingRequests: updatedPending
-      })
-    } else {
-      set({ pendingRequests: updatedPending })
-    }
+    // 好友系统功能待后续实现
+    throw new Error('好友系统功能暂未实现')
   },
 
   removeFriend: async (friendshipId: string) => {
-    const { error } = await supabase
-      .from('friendships')
-      .delete()
-      .eq('id', friendshipId)
-    
-    if (error) throw error
-    
-    const { friends } = get()
-    set({ friends: friends.filter(friend => friend.id !== friendshipId) })
+    // 好友系统功能待后续实现
+    throw new Error('好友系统功能暂未实现')
   }
 }))
 
@@ -1225,14 +714,8 @@ export const useChallengesStore = create<ChallengesState>((set, get) => ({
   loadChallenges: async () => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      set({ challenges: data || [] })
+      // 挑战系统功能待后续实现
+      set({ challenges: [] })
     } catch (error) {
       console.error('Load challenges error:', error)
     } finally {
@@ -1242,91 +725,26 @@ export const useChallengesStore = create<ChallengesState>((set, get) => ({
 
   loadParticipants: async (challengeId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('challenge_participants')
-        .select(`
-          *,
-          child:children(name, avatar_url)
-        `)
-        .eq('challenge_id', challengeId)
-        .order('progress', { ascending: false })
-      
-      if (error) throw error
-      set({ participants: data || [] })
+      // 挑战系统功能待后续实现
+      set({ participants: [] })
     } catch (error) {
       console.error('Load participants error:', error)
     }
   },
 
   joinChallenge: async (challengeId: string, childId: string) => {
-    // 检查是否已经参加
-    const { data: existingParticipant } = await supabase
-      .from('challenge_participants')
-      .select('id')
-      .eq('challenge_id', challengeId)
-      .eq('child_id', childId)
-      .single()
-    
-    if (existingParticipant) {
-      throw new Error('已经参加了这个挑战')
-    }
-    
-    const { data, error } = await supabase
-      .from('challenge_participants')
-      .insert({
-        challenge_id: challengeId,
-        child_id: childId,
-        status: 'joined',
-        progress: 0
-      })
-      .select(`
-        *,
-        child:children(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { participants } = get()
-    set({ participants: [...participants, data] })
+    // 挑战系统功能待后续实现
+    throw new Error('挑战系统功能暂未实现')
   },
 
   updateProgress: async (participantId: string, progress: number) => {
-    const { data, error } = await supabase
-      .from('challenge_participants')
-      .update({ progress })
-      .eq('id', participantId)
-      .select(`
-        *,
-        child:children(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { participants } = get()
-    set({ participants: participants.map(p => p.id === participantId ? data : p) })
+    // 挑战系统功能待后续实现
+    throw new Error('挑战系统功能暂未实现')
   },
 
   completeChallenge: async (participantId: string) => {
-    const { data, error } = await supabase
-      .from('challenge_participants')
-      .update({ 
-        status: 'completed',
-        progress: 100,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', participantId)
-      .select(`
-        *,
-        child:children(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { participants } = get()
-    set({ participants: participants.map(p => p.id === participantId ? data : p) })
+    // 挑战系统功能待后续实现
+    throw new Error('挑战系统功能暂未实现')
   }
 }))
 
@@ -1338,17 +756,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadMessages: async (senderId: string, receiverId: string) => {
     set({ loading: true })
     try {
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select(`
-          *,
-          sender:children!chat_messages_sender_id_fkey(name, avatar_url)
-        `)
-        .or(`and(sender_id.eq.${senderId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${senderId})`)
-        .order('created_at', { ascending: true })
-      
-      if (error) throw error
-      set({ messages: data || [] })
+      // 聊天系统功能待后续实现
+      set({ messages: [] })
     } catch (error) {
       console.error('Load messages error:', error)
     } finally {
@@ -1357,49 +766,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (senderId: string, receiverId: string, message: string, type: 'text' | 'preset' | 'emoji' = 'text') => {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert({
-        sender_id: senderId,
-        receiver_id: receiverId,
-        message,
-        message_type: type,
-        is_read: false
-      })
-      .select(`
-        *,
-        sender:children!chat_messages_sender_id_fkey(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { messages } = get()
-    set({ messages: [...messages, data] })
+    // 聊天系统功能待后续实现
+    throw new Error('聊天系统功能暂未实现')
   },
 
   markAsRead: async (messageId: string) => {
-    const { error } = await supabase
-      .from('chat_messages')
-      .update({ is_read: true })
-      .eq('id', messageId)
-    
-    if (error) throw error
-    
-    const { messages } = get()
-    set({ messages: messages.map(msg => msg.id === messageId ? { ...msg, is_read: true } : msg) })
+    // 聊天系统功能待后续实现
+    throw new Error('聊天系统功能暂未实现')
   },
 
   loadPresetMessages: async () => {
     try {
-      const { data, error } = await supabase
-        .from('preset_messages')
-        .select('message')
-        .eq('is_active', true)
-        .order('category')
-      
-      if (error) throw error
-      return data?.map(item => item.message) || []
+      // 聊天系统功能待后续实现
+      return []
     } catch (error) {
       console.error('Load preset messages error:', error)
       return []
@@ -1415,29 +794,8 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
   loadLeaderboard: async (familyId?: string) => {
     set({ loading: true })
     try {
-      let query = supabase
-        .from('children')
-        .select('id, name, total_points, avatar_url')
-        .order('total_points', { ascending: false })
-      
-      if (familyId) {
-        query = query.eq('family_id', familyId)
-      }
-      
-      const { data, error } = await query
-      
-      if (error) throw error
-      
-      // 添加排名信息
-      const leaderboardData: LeaderboardEntry[] = (data || []).map((child, index) => ({
-        id: child.id,
-        name: child.name,
-        points: child.total_points || 0,
-        rank: index + 1,
-        avatar: child.avatar_url || ''
-      }))
-      
-      set({ leaderboard: leaderboardData })
+      // 排行榜功能待后续实现
+      set({ leaderboard: [] })
     } catch (error) {
       console.error('Load leaderboard error:', error)
     } finally {
@@ -1447,15 +805,8 @@ export const useLeaderboardStore = create<LeaderboardState>((set, get) => ({
 
   getChildRank: async (childId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('children')
-        .select('id, total_points')
-        .order('total_points', { ascending: false })
-      
-      if (error) throw error
-      
-      const childIndex = data?.findIndex(child => child.id === childId)
-      return childIndex !== undefined && childIndex !== -1 ? childIndex + 1 : null
+      // 排行榜功能待后续实现
+      return null
     } catch (error) {
       console.error('Get child rank error:', error)
       return null
@@ -1512,41 +863,8 @@ export const useSupervisionStore = create<SupervisionState>((set, get) => ({
   loadSupervisionLogs: async (familyId: string, filters = {}) => {
     set({ loading: true })
     try {
-      let query = supabase
-        .from('supervision_logs')
-        .select(`
-          *,
-          child:children(name, avatar_url)
-        `)
-        .eq('children.family_id', familyId)
-        .order('created_at', { ascending: false })
-      
-      if (filters.childId) {
-        query = query.eq('child_id', filters.childId)
-      }
-      
-      if (filters.activityType) {
-        query = query.eq('activity_type', filters.activityType)
-      }
-      
-      if (filters.flagged !== undefined) {
-        query = query.eq('flagged', filters.flagged)
-      }
-      
-      if (filters.dateRange) {
-        query = query
-          .gte('created_at', filters.dateRange.start)
-          .lte('created_at', filters.dateRange.end)
-      }
-      
-      const { data, error } = await query
-      
-      if (error) throw error
-      
-      const logs = data || []
-      const flaggedLogs = logs.filter(log => log.flagged)
-      
-      set({ logs, flaggedLogs })
+      // 监督功能待后续实现
+      set({ logs: [], flaggedLogs: [] })
     } catch (error) {
       console.error('Load supervision logs error:', error)
     } finally {
@@ -1555,61 +873,13 @@ export const useSupervisionStore = create<SupervisionState>((set, get) => ({
   },
 
   flagActivity: async (logId: string, reason?: string) => {
-    const { data, error } = await supabase
-      .from('supervision_logs')
-      .update({ 
-        flagged: true,
-        details: { 
-          ...get().logs.find(log => log.id === logId)?.details,
-          flag_reason: reason,
-          flagged_at: new Date().toISOString()
-        }
-      })
-      .eq('id', logId)
-      .select(`
-        *,
-        child:children(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { logs, flaggedLogs } = get()
-    const updatedLogs = logs.map(log => log.id === logId ? data : log)
-    const updatedFlaggedLogs = [...flaggedLogs, data]
-    
-    set({ logs: updatedLogs, flaggedLogs: updatedFlaggedLogs })
+    // 监督功能待后续实现
+    throw new Error('监督功能暂未实现')
   },
 
   reviewActivity: async (logId: string, approved: boolean, notes?: string) => {
-    const { user } = useAuthStore.getState()
-    if (!user) throw new Error('User not authenticated')
-    
-    const { data, error } = await supabase
-      .from('supervision_logs')
-      .update({ 
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
-        details: {
-          ...get().logs.find(log => log.id === logId)?.details,
-          review_approved: approved,
-          review_notes: notes
-        }
-      })
-      .eq('id', logId)
-      .select(`
-        *,
-        child:children(name, avatar_url)
-      `)
-      .single()
-    
-    if (error) throw error
-    
-    const { logs, flaggedLogs } = get()
-    const updatedLogs = logs.map(log => log.id === logId ? data : log)
-    const updatedFlaggedLogs = flaggedLogs.map(log => log.id === logId ? data : log)
-    
-    set({ logs: updatedLogs, flaggedLogs: updatedFlaggedLogs })
+    // 监督功能待后续实现
+    throw new Error('监督功能暂未实现')
   },
 
   getActivityStats: async (familyId: string, period = 'week') => {
@@ -1628,20 +898,13 @@ export const useSupervisionStore = create<SupervisionState>((set, get) => ({
           startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       }
       
-      const { data, error } = await supabase
-        .from('supervision_logs')
-        .select('activity_type, flagged')
-        .eq('children.family_id', familyId)
-        .gte('created_at', startDate.toISOString())
-      
-      if (error) throw error
-      
+      // 监督功能待后续实现
       const stats = {
-        totalActivities: data?.length || 0,
-        flaggedActivities: data?.filter(log => log.flagged).length || 0,
-        chatMessages: data?.filter(log => log.activity_type === 'chat').length || 0,
-        challengeParticipations: data?.filter(log => log.activity_type === 'challenge').length || 0,
-        friendshipRequests: data?.filter(log => log.activity_type === 'friendship').length || 0
+        totalActivities: 0,
+        flaggedActivities: 0,
+        chatMessages: 0,
+        challengeParticipations: 0,
+        friendshipRequests: 0
       }
       
       return stats

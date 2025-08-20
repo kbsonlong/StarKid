@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, Settings, Copy, Check, Crown, Eye, EyeOff, UserCheck } from 'lucide-react';
 import { useAuthStore } from '../store';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/api';
 import { toast } from 'sonner';
 import { JoinRequestsManager } from '../components/JoinRequestsManager';
 
@@ -23,11 +23,16 @@ interface FamilyMember {
 interface PendingBehavior {
   id: string;
   child_id: string;
-  type: 'positive' | 'negative';
-  description: string;
-  points: number;
+  rule_id: string;
+  points_change: number;
+  notes?: string;
   recorded_by: string;
   is_verified: boolean;
+  verification_required: boolean;
+  verified_by?: string;
+  verified_at?: string;
+  has_image: boolean;
+  family_id: string;
   created_at: string;
   child: {
     name: string;
@@ -40,12 +45,16 @@ interface PendingBehavior {
 
 interface PendingReward {
   id: string;
-  child_id: string;
+  family_id: string;
   name: string;
-  points_cost: number;
-  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  points_required: number;
+  description?: string;
+  is_active: boolean;
+  status?: 'pending' | 'approved' | 'rejected';
+  approved_by?: string;
+  approval_note?: string;
   created_at: string;
-  child: {
+  child?: {
     name: string;
     avatar_url?: string;
   };
@@ -79,18 +88,7 @@ const Collaborate: React.FC = () => {
     if (!family) return;
     
     try {
-      const { data, error } = await supabase
-        .from('family_members')
-        .select(`
-          *,
-          user:users(
-            id, name, email, avatar_url
-          )
-        `)
-        .eq('family_id', family.id)
-        .order('joined_at', { ascending: true });
-
-      if (error) throw error;
+      const data = await apiClient.getFamilyMembers(family.id);
       setFamilyMembers(data || []);
     } catch (error) {
       console.error('加载家庭成员失败:', error);
@@ -102,33 +100,35 @@ const Collaborate: React.FC = () => {
     
     try {
       // 加载待审核行为
-      const { data: behaviors, error: behaviorError } = await supabase
-        .from('behaviors')
-        .select(`
-          *,
-          child:children(name, avatar_url),
-          recorder:users!behaviors_recorded_by_fkey(name)
-        `)
-        .eq('is_verified', false)
-        .in('child_id', family.children?.map(c => c.id) || [])
-        .order('created_at', { ascending: false });
-
-      if (behaviorError) throw behaviorError;
-      setPendingBehaviors(behaviors || []);
+      const behaviors = await apiClient.getBehaviors(family.id, { verified: false });
+      // 转换为 PendingBehavior 格式
+      const pendingBehaviors = behaviors?.filter(b => !b.is_verified).map(behavior => ({
+        ...behavior,
+        recorded_by: behavior.child_id, // 临时使用 child_id
+        is_verified: false,
+        verification_required: true,
+        has_image: behavior.has_image || false,
+        family_id: behavior.children?.family_id || '',
+        child: {
+          name: behavior.children?.name || '未知孩子',
+          avatar_url: behavior.children?.avatar_url
+        },
+        recorder: {
+          name: 'Unknown' // 需要从用户信息获取
+        }
+      })) || []
+      setPendingBehaviors(pendingBehaviors || []);
 
       // 加载待审核奖励
-      const { data: rewards, error: rewardError } = await supabase
-        .from('rewards')
-        .select(`
-          *,
-          child:children(name, avatar_url)
-        `)
-        .eq('status', 'pending')
-        .in('child_id', family.children?.map(c => c.id) || [])
-        .order('created_at', { ascending: false });
-
-      if (rewardError) throw rewardError;
-      setPendingRewards(rewards || []);
+      const rewards = await apiClient.getRewards(family.id);
+      // 过滤出待审核的奖励并转换格式
+      const pendingRewards = rewards
+        .filter(r => r.status === 'pending')
+        .map(reward => ({
+          ...reward,
+          child: undefined
+        }));
+      setPendingRewards(pendingRewards || []);
     } catch (error) {
       console.error('加载待审核项目失败:', error);
     }
@@ -141,12 +141,7 @@ const Collaborate: React.FC = () => {
     try {
       const newCode = await generateInviteCode();
       
-      const { error } = await supabase
-        .from('families')
-        .update({ invite_code: newCode })
-        .eq('id', family.id);
-
-      if (error) throw error;
+      await apiClient.updateFamily(family.id, { invite_code: newCode });
 
       setInviteCode(newCode);
       toast.success('邀请码已更新');
@@ -174,12 +169,7 @@ const Collaborate: React.FC = () => {
   const updateMemberRole = async (memberId: string, newRole: 'parent' | 'guardian' | 'member') => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('family_members')
-        .update({ role: newRole })
-        .eq('id', memberId);
-
-      if (error) throw error;
+      await apiClient.updateFamilyMemberRole(family.id, memberId, newRole, []);
 
       toast.success('成员角色已更新');
       loadFamilyMembers();
@@ -196,12 +186,7 @@ const Collaborate: React.FC = () => {
     
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('family_members')
-        .delete()
-        .eq('id', memberId);
-
-      if (error) throw error;
+      await apiClient.removeFamilyMember(family.id, memberId);
 
       toast.success('成员已移除');
       loadFamilyMembers();
@@ -216,15 +201,10 @@ const Collaborate: React.FC = () => {
   const approveBehavior = async (behaviorId: string, approved: boolean) => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('behaviors')
-        .update({ 
-          is_verified: approved,
-          verified_by: approved ? user?.id : null
-        })
-        .eq('id', behaviorId);
-
-      if (error) throw error;
+      await apiClient.updateBehavior(behaviorId, { 
+        is_verified: approved,
+        verified_by: approved ? user?.id : null
+      });
 
       toast.success(approved ? '行为已审核通过' : '行为已拒绝');
       loadPendingApprovals();
@@ -239,16 +219,11 @@ const Collaborate: React.FC = () => {
   const approveReward = async (rewardId: string, approved: boolean, note?: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('rewards')
-        .update({ 
-          status: approved ? 'approved' : 'rejected',
-          approved_by: user?.id,
-          approval_note: note
-        })
-        .eq('id', rewardId);
-
-      if (error) throw error;
+      await apiClient.updateReward(rewardId, { 
+        status: approved ? 'approved' : 'rejected',
+        approved_by: user?.id,
+        approval_note: note
+      });
 
       toast.success(approved ? '奖励已审核通过' : '奖励已拒绝');
       loadPendingApprovals();
@@ -560,16 +535,16 @@ const Collaborate: React.FC = () => {
                           <div className="flex-1">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <span className={`px-2 py-1 text-xs rounded-full ${
-                                behavior.type === 'positive' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                behavior.points_change > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
-                                {behavior.type === 'positive' ? '正面行为' : '负面行为'}
+                                {behavior.rule_id ? '行为记录' : '行为记录'}
                               </span>
                               <span className="text-xs xs:text-sm text-gray-600">{behavior.child?.name || '未知孩子'}</span>
                               <span className="text-xs xs:text-sm text-gray-500">记录者: {behavior.recorder?.name || '未知记录者'}</span>
                             </div>
-                            <p className="text-sm xs:text-base text-gray-800 mb-1">{behavior.description}</p>
+                            <p className="text-sm xs:text-base text-gray-800 mb-1">{behavior.notes || '无备注'}</p>
                             <p className="text-xs xs:text-sm text-gray-600">
-                              积分: {behavior.type === 'positive' ? `+${behavior.points}` : `扣${Math.abs(behavior.points)}分`} | 
+                              积分: {behavior.points_change > 0 ? `+${behavior.points_change}` : `${behavior.points_change}分`} | 
                               时间: {new Date(behavior.created_at).toLocaleString()}
                             </p>
                           </div>
@@ -612,7 +587,7 @@ const Collaborate: React.FC = () => {
                               </span>
                             </div>
                             <p className="text-sm xs:text-base text-gray-800 mb-1">{reward.name}</p>
-                            <p className="text-xs xs:text-sm text-gray-600">需要积分: {reward.points_cost}</p>
+                            <p className="text-xs xs:text-sm text-gray-600">需要积分: {reward.points_required}</p>
                           </div>
                           <div className="flex space-x-2 xs:ml-4">
                             <button

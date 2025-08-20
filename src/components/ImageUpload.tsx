@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, X, Loader2 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/api';
 import { useAuthStore } from '../store';
 
 interface ImageUploadProps {
@@ -60,7 +60,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     }
   };
 
-  const uploadToSupabase = async (file: File): Promise<{ url: string; path: string }> => {
+  const uploadToCloudflare = async (file: File): Promise<{ url: string; path: string }> => {
     if (!user) {
       throw new Error('用户未登录');
     }
@@ -69,19 +69,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = `${user.id}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('behavior-images')
-      .upload(filePath, file);
-
-    if (uploadError) {
-      throw new Error(`上传失败: ${uploadError.message}`);
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('behavior-images')
-      .getPublicUrl(filePath);
-
-    return { url: publicUrl, path: filePath };
+    return await apiClient.uploadFile(file, filePath);
   };
 
   const handleFileSelect = async (files: FileList | null) => {
@@ -120,7 +108,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       try {
         setIsUploading(true);
         const compressedFile = await compressImage(file);
-        const { url, path } = await uploadToSupabase(compressedFile);
+        const { url, path } = await uploadToCloudflare(compressedFile);
         
         setImages(prev => prev.map(img => 
           img.id === tempId 
@@ -146,12 +134,10 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     const imageToRemove = images.find(img => img.id === imageId);
     if (!imageToRemove) return;
 
-    // 如果是已上传的图片，从Supabase删除
+    // 如果是已上传的图片，从云存储删除
     if (imageToRemove.path && !imageToRemove.uploading) {
       try {
-        await supabase.storage
-          .from('behavior-images')
-          .remove([imageToRemove.path]);
+        await apiClient.deleteFile(imageToRemove.path);
         
         onImageRemoved?.(imageId);
       } catch (error) {

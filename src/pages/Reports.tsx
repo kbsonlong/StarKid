@@ -95,12 +95,12 @@ export function Reports() {
       
       const positive = dayBehaviors.filter(b => {
         const rule = rules.find(r => r.id === b.rule_id)
-        return rule?.type === 'reward'
+        return rule?.type === 'positive'
       }).length
       
       const negative = dayBehaviors.filter(b => {
         const rule = rules.find(r => r.id === b.rule_id)
-        return rule?.type === 'punishment'
+        return rule?.type === 'negative'
       }).length
       
       const points = dayBehaviors.reduce((sum, b) => sum + b.points_change, 0)
@@ -125,7 +125,7 @@ export function Reports() {
       
       const positiveBehaviors = childBehaviors.filter(b => {
         const rule = rules.find(r => r.id === b.rule_id)
-        return rule?.type === 'reward'
+        return rule?.type === 'positive'
       }).length
       
       const positiveRate = totalBehaviors > 0 ? (positiveBehaviors / totalBehaviors) * 100 : 0
@@ -161,7 +161,7 @@ export function Reports() {
     const totalBehaviors = filteredBehaviors.length
     const positiveBehaviors = filteredBehaviors.filter(b => {
       const rule = rules.find(r => r.id === b.rule_id)
-      return rule?.type === 'reward'
+      return rule?.type === 'positive'
     }).length
     const totalPoints = filteredBehaviors.reduce((sum, b) => sum + b.points_change, 0)
     const averagePointsPerDay = dailyStats.reduce((sum, s) => sum + s.points, 0) / dailyStats.length || 0
@@ -481,7 +481,7 @@ export function Reports() {
               <div>
                 <h4 className="font-medium text-gray-700 mb-3">积极行为</h4>
                 <div className="space-y-2">
-                  {rules.filter(rule => rule.type === 'reward').map(rule => {
+                  {rules.filter(rule => rule.type === 'positive').map(rule => {
                     const count = filteredBehaviors.filter(b => b.rule_id === rule.id).length
                     const percentage = overallStats.totalBehaviors > 0 ? (count / overallStats.totalBehaviors) * 100 : 0
                     
@@ -506,7 +506,7 @@ export function Reports() {
               <div>
                 <h4 className="font-medium text-gray-700 mb-3">需要改进的行为</h4>
                 <div className="space-y-2">
-                  {rules.filter(rule => rule.type === 'punishment').map(rule => {
+                  {rules.filter(rule => rule.type === 'negative').map(rule => {
                     const count = filteredBehaviors.filter(b => b.rule_id === rule.id).length
                     const percentage = overallStats.totalBehaviors > 0 ? (count / overallStats.totalBehaviors) * 100 : 0
                     

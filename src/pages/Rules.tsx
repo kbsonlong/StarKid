@@ -9,13 +9,13 @@ import {
   X
 } from 'lucide-react'
 import { useRulesStore } from '../store'
-import { Rule } from '../lib/supabase'
+import { Rule } from '../lib/api'
 
 interface RuleFormData {
   name: string
   description: string
   points: number
-  type: 'reward' | 'punishment'
+  type: 'positive' | 'negative'
   category: string
 }
 
@@ -23,7 +23,7 @@ const initialFormData: RuleFormData = {
   name: '',
   description: '',
   points: 0,
-  type: 'reward',
+  type: 'positive',
   category: ''
 }
 
@@ -43,7 +43,7 @@ export function Rules() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
   const [formData, setFormData] = useState<RuleFormData>(initialFormData)
   const [submitting, setSubmitting] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'reward' | 'punishment'>('all')
+  const [filter, setFilter] = useState<'all' | 'positive' | 'negative'>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   useEffect(() => {
@@ -51,9 +51,9 @@ export function Rules() {
   }, [])
 
   const filteredRules = rules.filter(rule => {
-    const typeMatch = filter === 'all' || rule.type === filter
-    const categoryMatch = categoryFilter === 'all' || rule.category === categoryFilter
-    return typeMatch && categoryMatch
+    if (filter !== 'all' && rule.type !== filter) return false
+    if (categoryFilter !== 'all' && rule.category !== categoryFilter) return false
+    return true
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,8 +65,7 @@ export function Rules() {
       // 处理积分转换：惩罚类型的正数自动转为负数
       const processedFormData = {
         ...formData,
-        points: formData.type === 'punishment' && formData.points > 0 
-          ? -formData.points 
+        points: formData.type === 'negative' ? -Math.abs(formData.points) 
           : formData.points
       }
       
@@ -93,7 +92,7 @@ export function Rules() {
     setFormData({
       name: rule.name,
       description: rule.description || '',
-      points: rule.type === 'punishment' && rule.points < 0 ? Math.abs(rule.points) : rule.points,
+      points: rule.type === 'negative' && rule.points < 0 ? Math.abs(rule.points) : rule.points,
       type: rule.type,
       category: rule.category || ''
     })
@@ -112,8 +111,8 @@ export function Rules() {
     setFormData(initialFormData)
   }
 
-  const rewardRules = filteredRules.filter(rule => rule.type === 'reward')
-  const punishmentRules = filteredRules.filter(rule => rule.type === 'punishment')
+  const rewardRules = filteredRules.filter(rule => rule.type === 'positive')
+  const punishmentRules = filteredRules.filter(rule => rule.type === 'negative')
 
   return (
     <div className="space-y-6">
@@ -139,12 +138,12 @@ export function Rules() {
             <label className="block text-sm font-medium text-gray-700 mb-2">类型筛选</label>
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value as 'all' | 'reward' | 'punishment')}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'positive' | 'negative')}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
             >
               <option value="all">全部</option>
-              <option value="reward">奖励</option>
-              <option value="punishment">惩罚</option>
+              <option value="positive">奖励</option>
+              <option value="negative">惩罚</option>
             </select>
           </div>
           <div>
@@ -233,9 +232,9 @@ export function Rules() {
                   <label className="flex items-center">
                     <input
                       type="radio"
-                      value="reward"
-                      checked={formData.type === 'reward'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'reward' | 'punishment' })}
+                      value="positive"
+                      checked={formData.type === 'positive'}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'positive' | 'negative' })}
                       className="mr-2 text-yellow-500 focus:ring-yellow-500"
                     />
                     <Star className="h-4 w-4 text-green-500 mr-1" />
@@ -244,9 +243,9 @@ export function Rules() {
                   <label className="flex items-center">
                     <input
                       type="radio"
-                      value="punishment"
-                      checked={formData.type === 'punishment'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'reward' | 'punishment' })}
+                      value="negative"
+                      checked={formData.type === 'negative'}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value as 'positive' | 'negative' })}
                       className="mr-2 text-yellow-500 focus:ring-yellow-500"
                     />
                     <AlertTriangle className="h-4 w-4 text-red-500 mr-1" />
@@ -264,7 +263,7 @@ export function Rules() {
                   value={formData.points}
                   onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder={formData.type === 'reward' ? '正数表示奖励积分' : '输入扣除的积分数（正数）'}
+                  placeholder={formData.type === 'positive' ? '正数表示奖励积分' : '输入扣除的积分数（正数）'}
                   required
                 />
               </div>
@@ -300,7 +299,7 @@ export function Rules() {
       ) : (
         <div className="space-y-6">
           {/* 奖励规则 */}
-          {(filter === 'all' || filter === 'reward') && (
+          {(filter === 'all' || filter === 'positive') && (
             <div>
               <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                 <Star className="h-5 w-5 text-green-500 mr-2" />
@@ -356,7 +355,7 @@ export function Rules() {
           )}
 
           {/* 惩罚规则 */}
-          {(filter === 'all' || filter === 'punishment') && (
+          {(filter === 'all' || filter === 'negative') && (
             <div>
               <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                 <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />

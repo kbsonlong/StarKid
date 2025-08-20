@@ -13,10 +13,10 @@ import {
   Image as ImageIcon
 } from 'lucide-react'
 import { useAuthStore, useRulesStore, useBehaviorsStore } from '../store'
-import { Behavior } from '../lib/supabase'
+import { Behavior } from '../lib/api'
 import { formatDateTime } from '../lib/utils'
 import { ImageUpload } from '../components/ImageUpload'
-import { supabase } from '../lib/supabase'
+import { apiClient } from '../lib/api'
 
 interface BehaviorFormData {
   child_id: string
@@ -64,7 +64,9 @@ export function Behaviors() {
 
   const filteredBehaviors = behaviors.filter(behavior => {
     const childMatch = selectedChild === 'all' || behavior.child_id === selectedChild
-    const typeMatch = selectedType === 'all' || behavior.rules?.type === selectedType
+    const typeMatch = selectedType === 'all' || 
+      (selectedType === 'reward' && behavior.rules?.type === 'positive') ||
+      (selectedType === 'punishment' && behavior.rules?.type === 'negative')
     const searchMatch = searchTerm === '' || 
       behavior.rules?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       behavior.children?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -111,14 +113,12 @@ export function Behaviors() {
       // 如果有上传的图片，保存到behavior_images表
       if (uploadedImages.length > 0 && newBehavior?.id) {
         for (const image of uploadedImages) {
-          await supabase
-            .from('behavior_images')
-            .insert({
-              behavior_id: newBehavior.id,
-              image_url: image.url || image.image_url,
-              storage_path: image.path || image.storage_path,
-              uploaded_by: useAuthStore.getState().user?.id
-            })
+          await apiClient.createBehaviorImage({
+            behavior_id: newBehavior.id,
+            image_url: image.url || image.image_url,
+            storage_path: image.path || image.storage_path,
+            uploaded_by: useAuthStore.getState().user?.id
+          })
         }
       }
       
@@ -267,7 +267,7 @@ export function Behaviors() {
                   <option value="">请选择规则</option>
                   {rules.map(rule => (
                     <option key={rule.id} value={rule.id}>
-                      {rule.type === 'reward' ? '🌟' : '⚠️'} {rule.name} ({rule.points > 0 ? '+' : ''}{rule.points}分)
+                      {rule.type === 'positive' ? '🌟' : '⚠️'} {rule.name} ({rule.points > 0 ? '+' : ''}{rule.points}分)
                     </option>
                   ))}
                 </select>
@@ -276,21 +276,21 @@ export function Behaviors() {
             
             {selectedRule && (
               <div className={`p-4 rounded-lg border-l-4 ${
-                selectedRule.type === 'reward' 
+                selectedRule.type === 'positive' 
                   ? 'bg-green-50 border-green-500' 
                   : 'bg-red-50 border-red-500'
               }`}>
                 <div className="flex items-center mb-2">
-                  {selectedRule.type === 'reward' ? (
+                  {selectedRule.type === 'positive' ? (
                     <Star className="h-5 w-5 text-green-500 mr-2" />
                   ) : (
                     <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
                   )}
                   <span className="font-medium text-gray-800">{selectedRule.name}</span>
                   <span className={`ml-auto font-semibold ${
-                    selectedRule.type === 'reward' ? 'text-green-600' : 'text-red-600'
+                    selectedRule.type === 'positive' ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {selectedRule.type === 'reward' 
+                    {selectedRule.type === 'positive' 
                       ? `+${selectedRule.points} 积分`
                       : `扣${Math.abs(selectedRule.points)}分`
                     }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../store'
-import { supabase } from '../lib/supabase'
+import { apiClient } from '../lib/api'
 
 function Debug() {
   const { user, family, children } = useAuthStore()
@@ -24,25 +24,24 @@ function Debug() {
         return
       }
 
-      // 测试直接查询children表
-      const { data, error } = await supabase
-        .from('children')
-        .select('*')
-        .eq('family_id', family.id)
+      // 测试查询儿童数据
+      try {
+        const childrenData = await apiClient.getChildren(family.id)
+        addTestResult('Children Query', childrenData, null)
+      } catch (error) {
+        addTestResult('Children Query', null, error)
+      }
 
-      addTestResult('Children Query', data, error)
+      // 测试查询家庭成员
+      try {
+        const membersData = await apiClient.getFamilyMembers(family.id)
+        addTestResult('Family Members Query', membersData, null)
+      } catch (error) {
+        addTestResult('Family Members Query', null, error)
+      }
 
-      // 测试查询family_members表
-      const { data: membersData, error: membersError } = await supabase
-        .from('family_members')
-        .select('*')
-        .eq('family_id', family.id)
-
-      addTestResult('Family Members Query', membersData, membersError)
-
-      // 测试当前用户权限
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      addTestResult('Current Auth User', authUser, null)
+      // 测试当前用户信息
+      addTestResult('Current Auth User', user, null)
 
     } catch (error) {
       addTestResult('Test Error', null, error)
